@@ -47,20 +47,11 @@ object Sort {
   def sort(a: Array[AnyRef], fromIndex: Int, toIndex: Int): Unit =
     comparableTimSort.doSort(a, fromIndex, toIndex)
 
-  def sort[T](a: DynamicArray[T], c: Ordering[T]): Unit =
-    TimSort.sort(a.items, 0, a.size, c)
-
   def sort[T](a: DynamicArray[T], mk: MkArray[T], c: Ordering[T]): Unit =
     TimSort.sort(a.items, mk, 0, a.size, c)
 
-  def sort[T](a: Array[T], c: Ordering[T]): Unit =
-    TimSort.sort(a, c)
-
   def sort[T](a: Array[T], mk: MkArray[T], c: Ordering[T]): Unit =
     TimSort.sort(a, mk, c)
-
-  def sort[T](a: Array[T], c: Ordering[T], fromIndex: Int, toIndex: Int): Unit =
-    TimSort.sort(a, fromIndex, toIndex, c)
 
   def sort[T](a: Array[T], mk: MkArray[T], c: Ordering[T], fromIndex: Int, toIndex: Int): Unit =
     TimSort.sort(a, mk, fromIndex, toIndex, c)
