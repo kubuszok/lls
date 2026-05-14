@@ -34,12 +34,12 @@ package util
 object Select {
   private var quickSelect: Nullable[QuickSelect[AnyRef]] = Nullable.empty
 
-  def select[T](items: Array[T], comp: Ordering[T], kthLowest: Int, size: Int): T = {
-    val idx = selectIndex(items, comp, kthLowest, size)
-    items(idx)
+  def select[T](items: Array[T], mk: MkArray[T], comp: Ordering[T], kthLowest: Int, size: Int): T = {
+    val idx = selectIndex(items, mk, comp, kthLowest, size)
+    mk.get(items, idx)
   }
 
-  def selectIndex[T](items: Array[T], comp: Ordering[T], kthLowest: Int, size: Int): Int = {
+  def selectIndex[T](items: Array[T], mk: MkArray[T], comp: Ordering[T], kthLowest: Int, size: Int): Int = {
     if (size < 1) {
       throw IllegalArgumentException("cannot select from empty array (size < 1)")
     } else if (kthLowest > size) {
@@ -49,23 +49,23 @@ object Select {
       // naive partial selection sort almost certain to outperform quickselect where n is min or max
       if (kthLowest == 1) {
         // find min
-        fastMin(items, comp, size)
+        fastMin(items, mk, comp, size)
       } else if (kthLowest == size) {
         // find max
-        fastMax(items, comp, size)
+        fastMax(items, mk, comp, size)
       } else {
         // quickselect a better choice for cases of k between min and max
         if (quickSelect.isEmpty) quickSelect = Nullable(QuickSelect[AnyRef]())
-        quickSelect.getOrElse(throw new AssertionError("unreachable")).select(items.asInstanceOf[Array[AnyRef]], comp.asInstanceOf[Ordering[AnyRef]], kthLowest, size)
+        quickSelect.getOrElse(throw new AssertionError("unreachable")).select(items.asInstanceOf[Array[AnyRef]], mk.asInstanceOf[MkArray[AnyRef]], comp.asInstanceOf[Ordering[AnyRef]], kthLowest, size)
       }
     idx
   }
 
   /** Faster than quickselect for n = min */
-  private def fastMin[T](items: Array[T], comp: Ordering[T], size: Int): Int = {
+  private def fastMin[T](items: Array[T], mk: MkArray[T], comp: Ordering[T], size: Int): Int = {
     var lowestIdx = 0
     for (i <- 1 until size) {
-      val comparison = comp.compare(items(i), items(lowestIdx))
+      val comparison = comp.compare(mk.get(items, i), mk.get(items, lowestIdx))
       if (comparison < 0) {
         lowestIdx = i
       }
@@ -74,10 +74,10 @@ object Select {
   }
 
   /** Faster than quickselect for n = max */
-  private def fastMax[T](items: Array[T], comp: Ordering[T], size: Int): Int = {
+  private def fastMax[T](items: Array[T], mk: MkArray[T], comp: Ordering[T], size: Int): Int = {
     var highestIdx = 0
     for (i <- 1 until size) {
-      val comparison = comp.compare(items(i), items(highestIdx))
+      val comparison = comp.compare(mk.get(items, i), mk.get(items, highestIdx))
       if (comparison > 0) {
         highestIdx = i
       }

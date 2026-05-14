@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": ["Bash", "mcp__metals__*", "WebFetch", "WebSearch"]
+  },
+  "enabledMcpjsonServers": ["metals"],
+  "enableAllProjectMcpServers": true,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  }
+}

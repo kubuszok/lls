@@ -17,7 +17,7 @@ class ObjectSetBench {
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var keys:   Array[String]    = uninitialized
+  private var keys:   Array[String]     = uninitialized
   private var set:    ObjectSet[String] = uninitialized
   private var intSet: ObjectSet[Int]    = uninitialized
 

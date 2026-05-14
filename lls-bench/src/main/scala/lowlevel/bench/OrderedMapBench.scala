@@ -17,9 +17,9 @@ class OrderedMapBench {
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var keys:    Array[String]            = uninitialized
-  private var map:     OrderedMap[String, Int]   = uninitialized
-  private var nextKey: Int                       = uninitialized
+  private var keys:    Array[String]           = uninitialized
+  private var map:     OrderedMap[String, Int] = uninitialized
+  private var nextKey: Int                     = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {

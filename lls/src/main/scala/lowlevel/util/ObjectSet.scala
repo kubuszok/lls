@@ -24,7 +24,8 @@
 package lowlevel
 package util
 
-import scala.compiletime.summonFrom
+import scala.annotation.publicInBinary
+import scala.compiletime.summonInline
 import scala.util.boundary
 
 /** An unordered set where the keys are objects. Null keys are not allowed. No allocation is done except when growing the table size.
@@ -40,15 +41,23 @@ import scala.util.boundary
   *   Nathan Sweet, Tommy Ettinger (original implementation)
   */
 final class ObjectSet[A] private (
-  private val mk:        MkArray[A],
-  private var keyTable:  Array[A],
-  private var filled:    Array[Boolean],
-  private var _size:     Int,
-  private var mask:      Int,
-  private var shift:     Int,
-  val loadFactor:        Float,
-  private var threshold: Int
+  mk0:            MkArray[A],
+  keyTable0:      Array[A],
+  filled0:        Array[Boolean],
+  size0:          Int,
+  mask0:          Int,
+  shift0:         Int,
+  val loadFactor: Float,
+  threshold0:     Int
 ) {
+
+  @publicInBinary private[util] val mk:        MkArray[A]     = mk0
+  @publicInBinary private[util] var keyTable:  Array[A]       = keyTable0
+  @publicInBinary private[util] var filled:    Array[Boolean] = filled0
+  @publicInBinary private[util] var _size:     Int            = size0
+  @publicInBinary private[util] var mask:      Int            = mask0
+  @publicInBinary private[util] var shift:     Int            = shift0
+  @publicInBinary private[util] var threshold: Int            = threshold0
 
   // --- Core ---
 
@@ -72,7 +81,7 @@ final class ObjectSet[A] private (
     var i = place(key)
     while (true) {
       if (!filled(i)) boundary.break(-(i + 1)) // Empty space is available.
-      if (keyTable(i) == key) boundary.break(i) // Same key was found.
+      if (mk.elemEquals(mk.get(keyTable, i), key)) boundary.break(i) // Same key was found.
       i = (i + 1) & mask
     }
     -1 // unreachable
@@ -86,7 +95,7 @@ final class ObjectSet[A] private (
     if (i >= 0) false // Existing key was found.
     else {
       val slot = -(i + 1) // Empty space was found.
-      keyTable(slot) = key
+      mk.set(keyTable, slot, key)
       filled(slot) = true
       _size += 1
       if (_size >= threshold) resize(keyTable.length << 1)
@@ -102,7 +111,7 @@ final class ObjectSet[A] private (
     val len         = otherKeys.length
     var i           = 0
     while (i < len) {
-      if (otherFilled(i)) add(otherKeys(i))
+      if (otherFilled(i)) add(other.mk.get(otherKeys, i))
       i += 1
     }
   }
@@ -127,10 +136,10 @@ final class ObjectSet[A] private (
       // Backward-shift deletion
       var next = (i + 1) & mask
       while (filled(next)) {
-        val k         = keyTable(next)
+        val k         = mk.get(keyTable, next)
         val placement = place(k)
         if (((next - placement) & mask) > ((i - placement) & mask)) {
-          keyTable(i) = k
+          mk.set(keyTable, i, k)
           filled(i) = true
           i = next
         }
@@ -138,7 +147,7 @@ final class ObjectSet[A] private (
       }
       filled(i) = false
       // Null the vacated slot to allow GC of the removed key reference
-      if (keyTable.isInstanceOf[Array[AnyRef]]) keyTable.asInstanceOf[Array[AnyRef]](i) = null
+      mk.nullOut(keyTable, i)
       _size -= 1
       true
     }
@@ -151,7 +160,7 @@ final class ObjectSet[A] private (
     */
   def get(key: A): Nullable[A] = {
     val i = locateKey(key)
-    if (i < 0) Nullable.empty[A] else Nullable(keyTable(i))
+    if (i < 0) Nullable.empty[A] else Nullable(mk.get(keyTable, i))
   }
 
   /** Returns the first non-empty element in the backing table. Throws if the set is empty. */
@@ -159,7 +168,7 @@ final class ObjectSet[A] private (
     val len = keyTable.length
     var i   = 0
     while (i < len) {
-      if (filled(i)) boundary.break(keyTable(i))
+      if (filled(i)) boundary.break(mk.get(keyTable, i))
       i += 1
     }
     throw new IllegalStateException("ObjectSet is empty.")
@@ -172,8 +181,7 @@ final class ObjectSet[A] private (
     if (_size == 0) ()
     else {
       // Null reference-type array to allow GC before resetting size
-      if (keyTable.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(keyTable.asInstanceOf[Array[AnyRef]], 0, keyTable.length, null)
+      mk.nullOutRange(keyTable, 0, keyTable.length)
       _size = 0
       java.util.Arrays.fill(filled, false)
     }
@@ -218,7 +226,7 @@ final class ObjectSet[A] private (
     if (_size > 0) {
       var i = 0
       while (i < oldCapacity) {
-        if (oldFilled(i)) addResize(oldKeyTable(i))
+        if (oldFilled(i)) addResize(mk.get(oldKeyTable, i))
         i += 1
       }
     }
@@ -229,7 +237,7 @@ final class ObjectSet[A] private (
     var i = place(key)
     while (true) {
       if (!filled(i)) {
-        keyTable(i) = key
+        mk.set(keyTable, i, key)
         filled(i) = true
         boundary.break(())
       }
@@ -244,11 +252,12 @@ final class ObjectSet[A] private (
   // against. All iteration functionality is preserved; only the mechanism differs.
 
   /** Calls the given function for each element in the set. Iteration order is not guaranteed. */
-  def foreach(f: A => Unit): Unit = {
-    val len = keyTable.length
-    var i   = 0
+  inline def foreach(inline f: A => Unit): Unit = MkArray.withResolved[A, Unit](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val keys = mk0.castArray(keyTable)
+    val len  = keys.length
+    var i    = 0
     while (i < len) {
-      if (filled(i)) f(keyTable(i))
+      if (filled(i)) f(mk0.get(keys, i).asInstanceOf[A])
       i += 1
     }
   }
@@ -259,7 +268,7 @@ final class ObjectSet[A] private (
     val len   = keyTable.length
     var i     = 0
     while (i < len) {
-      if (filled(i)) array.add(keyTable(i))
+      if (filled(i)) array.add(mk.get(keyTable, i))
       i += 1
     }
     array
@@ -272,7 +281,7 @@ final class ObjectSet[A] private (
     val len = keyTable.length
     var i   = 0
     while (i < len) {
-      if (filled(i)) h += keyTable(i).hashCode()
+      if (filled(i)) h += mk.get(keyTable, i).hashCode()
       i += 1
     }
     h
@@ -288,7 +297,7 @@ final class ObjectSet[A] private (
         var equal    = true
         var i        = 0
         while (i < len && equal) {
-          if (filled(i) && !otherSet.contains(keyTable(i))) equal = false
+          if (filled(i) && !otherSet.contains(mk.get(keyTable, i))) equal = false
           i += 1
         }
         equal
@@ -307,7 +316,7 @@ final class ObjectSet[A] private (
       while (i < len) {
         if (filled(i)) {
           if (!first) sb.append(separator)
-          sb.append(keyTable(i))
+          sb.append(mk.get(keyTable, i))
           first = false
         }
         i += 1
@@ -380,8 +389,6 @@ object ObjectSet {
   private[util] def createWithMk[A](mk: MkArray[A], capacity: Int, loadFactor: Float): ObjectSet[A] =
     create(mk, capacity, loadFactor)
 
-  /** Resolves MkArray at compile time using summonFrom. */
-  private inline def summonMkArray[A]: MkArray[A] = summonFrom { case mk: MkArray[A] =>
-    mk
-  }
+  /** Resolves MkArray at compile time using summonInline. */
+  private inline def summonMkArray[A]: MkArray[A] = summonInline[MkArray[A]]
 }

@@ -24,7 +24,8 @@
 package lowlevel
 package util
 
-import scala.compiletime.summonFrom
+import scala.annotation.publicInBinary
+import scala.compiletime.summonInline
 import scala.util.boundary
 
 /** An unordered map where the keys and values are objects. Null keys are not allowed. No allocation is done except when growing the table size.
@@ -42,17 +43,27 @@ import scala.util.boundary
   *   Nathan Sweet, Tommy Ettinger (original implementation)
   */
 final class ObjectMap[K, V] private (
-  private val mkK:        MkArray[K],
-  private val mkV:        MkArray[V],
-  private var keyTable:   Array[K],
-  private var valueTable: Array[V],
-  private var filled:     Array[Boolean],
-  private var _size:      Int,
-  private var mask:       Int,
-  private var shift:      Int,
-  val loadFactor:         Float,
-  private var threshold:  Int
+  mkK0:           MkArray[K],
+  mkV0:           MkArray[V],
+  keyTable0:      Array[K],
+  valueTable0:    Array[V],
+  filled0:        Array[Boolean],
+  size0:          Int,
+  mask0:          Int,
+  shift0:         Int,
+  val loadFactor: Float,
+  threshold0:     Int
 ) {
+
+  @publicInBinary private[util] val mkK:        MkArray[K]     = mkK0
+  @publicInBinary private[util] val mkV:        MkArray[V]     = mkV0
+  @publicInBinary private[util] var keyTable:   Array[K]       = keyTable0
+  @publicInBinary private[util] var valueTable: Array[V]       = valueTable0
+  @publicInBinary private[util] var filled:     Array[Boolean] = filled0
+  @publicInBinary private[util] var _size:      Int            = size0
+  @publicInBinary private[util] var mask:       Int            = mask0
+  @publicInBinary private[util] var shift:      Int            = shift0
+  @publicInBinary private[util] var threshold:  Int            = threshold0
 
   // --- Core ---
 
@@ -76,7 +87,7 @@ final class ObjectMap[K, V] private (
     var i = place(key)
     while (true) {
       if (!filled(i)) boundary.break(-(i + 1)) // Empty space is available.
-      if (keyTable(i) == key) boundary.break(i) // Same key was found.
+      if (mkK.elemEquals(mkK.get(keyTable, i), key)) boundary.break(i) // Same key was found.
       i = (i + 1) & mask
     }
     -1 // unreachable
@@ -89,13 +100,13 @@ final class ObjectMap[K, V] private (
   def put(key: K, value: V): Nullable[V] = {
     val i = locateKey(key)
     if (i >= 0) { // Existing key was found.
-      val oldValue = valueTable(i)
-      valueTable(i) = value
+      val oldValue = mkV.get(valueTable, i)
+      mkV.set(valueTable, i, value)
       Nullable(oldValue)
     } else {
       val slot = -(i + 1) // Empty space was found.
-      keyTable(slot) = key
-      valueTable(slot) = value
+      mkK.set(keyTable, slot, key)
+      mkV.set(valueTable, slot, value)
       filled(slot) = true
       _size += 1
       if (_size >= threshold) resize(keyTable.length << 1)
@@ -106,20 +117,20 @@ final class ObjectMap[K, V] private (
   /** Returns the value for the specified key, or `Nullable.empty` if the key is not in the map. */
   def get(key: K): Nullable[V] = {
     val i = locateKey(key)
-    if (i < 0) Nullable.empty[V] else Nullable(valueTable(i))
+    if (i < 0) Nullable.empty[V] else Nullable(mkV.get(valueTable, i))
   }
 
   /** Returns the value for the specified key, or the default value if the key is not in the map. */
   def get(key: K, defaultValue: V): V = {
     val i = locateKey(key)
-    if (i < 0) defaultValue else valueTable(i)
+    if (i < 0) defaultValue else mkV.get(valueTable, i)
   }
 
   /** Returns the value for the specified key without checking if it exists. Only safe when the caller guarantees the key is present in the map.
     */
   private[util] def getUnsafe(key: K): V = {
     val i = locateKey(key)
-    valueTable(i)
+    mkV.get(valueTable, i)
   }
 
   /** Returns the value for the removed key, or `Nullable.empty` if the key is not in the map. Uses backward-shift deletion to maintain probe sequences without tombstones.
@@ -128,15 +139,15 @@ final class ObjectMap[K, V] private (
     var i = locateKey(key)
     if (i < 0) Nullable.empty[V]
     else {
-      val oldValue = valueTable(i)
+      val oldValue = mkV.get(valueTable, i)
       // Backward-shift deletion
       var next = (i + 1) & mask
       while (filled(next)) {
-        val k         = keyTable(next)
+        val k         = mkK.get(keyTable, next)
         val placement = place(k)
         if (((next - placement) & mask) > ((i - placement) & mask)) {
-          keyTable(i) = k
-          valueTable(i) = valueTable(next)
+          mkK.set(keyTable, i, k)
+          mkV.set(valueTable, i, mkV.get(valueTable, next))
           filled(i) = true
           i = next
         }
@@ -144,8 +155,8 @@ final class ObjectMap[K, V] private (
       }
       filled(i) = false
       // Null the vacated slot to allow GC of the removed key/value references
-      if (keyTable.isInstanceOf[Array[AnyRef]]) keyTable.asInstanceOf[Array[AnyRef]](i) = null
-      if (valueTable.isInstanceOf[Array[AnyRef]]) valueTable.asInstanceOf[Array[AnyRef]](i) = null
+      mkK.nullOut(keyTable, i)
+      mkV.nullOut(valueTable, i)
       _size -= 1
       Nullable(oldValue)
     }
@@ -167,12 +178,12 @@ final class ObjectMap[K, V] private (
     var i   = 0
     if (identity) {
       while (i < len) {
-        if (filled(i) && (valueTable(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef])) boundary.break(true)
+        if (filled(i) && (mkV.get(valueTable, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef])) boundary.break(true)
         i += 1
       }
     } else {
       while (i < len) {
-        if (filled(i) && valueTable(i) == value) boundary.break(true)
+        if (filled(i) && mkV.elemEquals(mkV.get(valueTable, i), value)) boundary.break(true)
         i += 1
       }
     }
@@ -192,13 +203,13 @@ final class ObjectMap[K, V] private (
     var i   = 0
     if (identity) {
       while (i < len) {
-        if (filled(i) && (valueTable(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]))
-          boundary.break(Nullable(keyTable(i)))
+        if (filled(i) && (mkV.get(valueTable, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]))
+          boundary.break(Nullable(mkK.get(keyTable, i)))
         i += 1
       }
     } else {
       while (i < len) {
-        if (filled(i) && valueTable(i) == value) boundary.break(Nullable(keyTable(i)))
+        if (filled(i) && mkV.elemEquals(mkV.get(valueTable, i), value)) boundary.break(Nullable(mkK.get(keyTable, i)))
         i += 1
       }
     }
@@ -216,7 +227,7 @@ final class ObjectMap[K, V] private (
     val len         = otherKeys.length
     var i           = 0
     while (i < len) {
-      if (otherFilled(i)) put(otherKeys(i), otherValues(i))
+      if (otherFilled(i)) put(other.mkK.get(otherKeys, i), other.mkV.get(otherValues, i))
       i += 1
     }
   }
@@ -226,10 +237,8 @@ final class ObjectMap[K, V] private (
     if (_size == 0) ()
     else {
       // Null reference-type arrays to allow GC before resetting size
-      if (keyTable.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(keyTable.asInstanceOf[Array[AnyRef]], 0, keyTable.length, null)
-      if (valueTable.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(valueTable.asInstanceOf[Array[AnyRef]], 0, valueTable.length, null)
+      mkK.nullOutRange(keyTable, 0, keyTable.length)
+      mkV.nullOutRange(valueTable, 0, valueTable.length)
       _size = 0
       java.util.Arrays.fill(filled, false)
     }
@@ -279,7 +288,7 @@ final class ObjectMap[K, V] private (
     if (_size > 0) {
       var i = 0
       while (i < oldCapacity) {
-        if (oldFilled(i)) putResize(oldKeyTable(i), oldValTable(i))
+        if (oldFilled(i)) putResize(mkK.get(oldKeyTable, i), mkV.get(oldValTable, i))
         i += 1
       }
     }
@@ -290,8 +299,8 @@ final class ObjectMap[K, V] private (
     var i = place(key)
     while (true) {
       if (!filled(i)) {
-        keyTable(i) = key
-        valueTable(i) = value
+        mkK.set(keyTable, i, key)
+        mkV.set(valueTable, i, value)
         filled(i) = true
         boundary.break(())
       }
@@ -306,34 +315,43 @@ final class ObjectMap[K, V] private (
   // All iteration functionality (entries, keys, values) is preserved; only the mechanism differs.
 
   /** Calls the given function for each key-value pair in the map. Iteration order is not guaranteed. */
-  def foreachEntry(f: (K, V) => Unit): Unit = {
-    val len = keyTable.length
-    var i   = 0
-    while (i < len) {
-      if (filled(i)) f(keyTable(i), valueTable(i))
-      i += 1
+  inline def foreachEntry(inline f: (K, V) => Unit): Unit =
+    MkArray.withResolved[K, Unit](mkK) { [BK, MkK <: MkArray[BK]] => (mk0K: MkK) =>
+      MkArray.withResolved[V, Unit](mkV) { [BV, MkV <: MkArray[BV]] => (mk0V: MkV) =>
+        val keys = mk0K.castArray(keyTable)
+        val vals = mk0V.castArray(valueTable)
+        val len  = keys.length
+        var i    = 0
+        while (i < len) {
+          if (filled(i)) f(mk0K.get(keys, i).asInstanceOf[K], mk0V.get(vals, i).asInstanceOf[V])
+          i += 1
+        }
+      }
     }
-  }
 
   /** Calls the given function for each key in the map. Iteration order is not guaranteed. */
-  def foreachKey(f: K => Unit): Unit = {
-    val len = keyTable.length
-    var i   = 0
-    while (i < len) {
-      if (filled(i)) f(keyTable(i))
-      i += 1
+  inline def foreachKey(inline f: K => Unit): Unit =
+    MkArray.withResolved[K, Unit](mkK) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+      val keys = mk0.castArray(keyTable)
+      val len  = keys.length
+      var i    = 0
+      while (i < len) {
+        if (filled(i)) f(mk0.get(keys, i).asInstanceOf[K])
+        i += 1
+      }
     }
-  }
 
   /** Calls the given function for each value in the map. Iteration order is not guaranteed. */
-  def foreachValue(f: V => Unit): Unit = {
-    val len = keyTable.length
-    var i   = 0
-    while (i < len) {
-      if (filled(i)) f(valueTable(i))
-      i += 1
+  inline def foreachValue(inline f: V => Unit): Unit =
+    MkArray.withResolved[V, Unit](mkV) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+      val vals = mk0.castArray(valueTable)
+      val len  = vals.length
+      var i    = 0
+      while (i < len) {
+        if (filled(i)) f(mk0.get(vals, i).asInstanceOf[V])
+        i += 1
+      }
     }
-  }
 
   // --- Standard ---
 
@@ -343,8 +361,8 @@ final class ObjectMap[K, V] private (
     var i   = 0
     while (i < len) {
       if (filled(i)) {
-        h += keyTable(i).hashCode()
-        h += valueTable(i).hashCode()
+        h += mkK.get(keyTable, i).hashCode()
+        h += mkV.get(valueTable, i).hashCode()
       }
       i += 1
     }
@@ -362,8 +380,8 @@ final class ObjectMap[K, V] private (
         var i        = 0
         while (i < len && equal) {
           if (filled(i)) {
-            val value    = valueTable(i)
-            val otherVal = otherMap.get(keyTable(i))
+            val value    = mkV.get(valueTable, i)
+            val otherVal = otherMap.get(mkK.get(keyTable, i))
             if (otherVal.isEmpty || otherVal.getOrElse(value) != value) equal = false
           }
           i += 1
@@ -385,8 +403,8 @@ final class ObjectMap[K, V] private (
         var i        = 0
         while (i < len && equal) {
           if (filled(i)) {
-            val otherVal = otherMap.get(keyTable(i))
-            if (otherVal.isEmpty || !(valueTable(i).asInstanceOf[AnyRef] eq otherVal.get.asInstanceOf[AnyRef]))
+            val otherVal = otherMap.get(mkK.get(keyTable, i))
+            if (otherVal.isEmpty || !(mkV.get(valueTable, i).asInstanceOf[AnyRef] eq otherVal.get.asInstanceOf[AnyRef]))
               equal = false
           }
           i += 1
@@ -414,9 +432,9 @@ final class ObjectMap[K, V] private (
       while (i < len) {
         if (filled(i)) {
           if (!first) sb.append(separator)
-          sb.append(keyTable(i))
+          sb.append(mkK.get(keyTable, i))
           sb.append('=')
-          sb.append(valueTable(i))
+          sb.append(mkV.get(valueTable, i))
           first = false
         }
         i += 1
@@ -445,8 +463,8 @@ object ObjectMap {
 
   /** Creates an ObjectMap with the given capacity and load factor. */
   inline def apply[K, V](capacity: Int, loadFactor: Float): ObjectMap[K, V] = {
-    val mkK = summonMkArray[K]
-    val mkV = summonMkArray[V]
+    val mkK = summonInline[MkArray[K]]
+    val mkV = summonInline[MkArray[V]]
     create(mkK, mkV, capacity, loadFactor)
   }
 
@@ -506,8 +524,4 @@ object ObjectMap {
     ts
   }
 
-  /** Resolves MkArray at compile time using summonFrom. */
-  private inline def summonMkArray[A]: MkArray[A] = summonFrom { case mk: MkArray[A] =>
-    mk
-  }
 }

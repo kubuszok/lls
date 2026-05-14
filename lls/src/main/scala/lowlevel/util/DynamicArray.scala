@@ -29,8 +29,8 @@
 package lowlevel
 package util
 
-import scala.annotation.targetName
-import scala.compiletime.summonFrom
+import scala.annotation.{ publicInBinary, targetName }
+import scala.compiletime.summonInline
 import scala.reflect.ClassTag
 import scala.util.boundary
 
@@ -52,11 +52,15 @@ import scala.util.boundary
   *   Whether to preserve element ordering on removal
   */
 final class DynamicArray[A] private (
-  private val mk:     MkArray[A],
-  private var _items: Array[A],
-  private var _size:  Int,
-  val preserveOrder:  Boolean
+  mk0:               MkArray[A],
+  items0:            Array[A],
+  size0:             Int,
+  val preserveOrder: Boolean
 ) {
+
+  @publicInBinary private[util] val mk:     MkArray[A] = mk0
+  @publicInBinary private[util] var _items: Array[A]   = items0
+  @publicInBinary private[util] var _size:  Int        = size0
 
   // Snapshot state — raw null for internal perf; never exposed via public API.
   // NOTE: begin()/end() is a resource-scoping pattern that could benefit from
@@ -80,14 +84,14 @@ final class DynamicArray[A] private (
   /** Returns the element at the given index. Bounds-checked. */
   def apply(index: Int): A = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
-    _items(index)
+    mk.get(_items, index)
   }
 
   /** Sets the element at the given index. Bounds-checked. */
   def update(index: Int, value: A): Unit = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
     modified()
-    _items(index) = value
+    mk.set(_items, index, value)
   }
 
   // --- Adding ---
@@ -96,7 +100,7 @@ final class DynamicArray[A] private (
   def add(value: A): Unit = {
     modified()
     if (_size == _items.length) grow(1)
-    _items(_size) = value
+    mk.set(_items, _size, value)
     _size += 1
   }
 
@@ -104,8 +108,8 @@ final class DynamicArray[A] private (
   def add(v1: A, v2: A): Unit = {
     modified()
     if (_size + 2 > _items.length) grow(2)
-    _items(_size) = v1
-    _items(_size + 1) = v2
+    mk.set(_items, _size, v1)
+    mk.set(_items, _size + 1, v2)
     _size += 2
   }
 
@@ -113,9 +117,9 @@ final class DynamicArray[A] private (
   def add(v1: A, v2: A, v3: A): Unit = {
     modified()
     if (_size + 3 > _items.length) grow(3)
-    _items(_size) = v1
-    _items(_size + 1) = v2
-    _items(_size + 2) = v3
+    mk.set(_items, _size, v1)
+    mk.set(_items, _size + 1, v2)
+    mk.set(_items, _size + 2, v3)
     _size += 3
   }
 
@@ -145,9 +149,9 @@ final class DynamicArray[A] private (
     if (preserveOrder) {
       System.arraycopy(_items, index, _items, index + 1, _size - index)
     } else {
-      _items(_size) = _items(index)
+      mk.set(_items, _size, mk.get(_items, index))
     }
-    _items(index) = value
+    mk.set(_items, index, value)
     _size += 1
   }
 
@@ -167,15 +171,15 @@ final class DynamicArray[A] private (
   def removeIndex(index: Int): A = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
     modified()
-    val value = _items(index)
+    val value = mk.get(_items, index)
     _size -= 1
     if (preserveOrder) {
       System.arraycopy(_items, index + 1, _items, index, _size - index)
     } else {
-      _items(index) = _items(_size)
+      mk.set(_items, index, mk.get(_items, _size))
     }
     // Null the vacated last slot to allow GC
-    if (_items.isInstanceOf[Array[AnyRef]]) _items.asInstanceOf[Array[AnyRef]](_size) = null
+    mk.nullOut(_items, _size)
     value
   }
 
@@ -183,7 +187,7 @@ final class DynamicArray[A] private (
   def removeValue(value: A): Boolean = boundary {
     var i = 0
     while (i < _size) {
-      if (_items(i) == value) {
+      if (mk.elemEquals(mk.get(_items, i), value)) {
         removeIndex(i)
         boundary.break(true)
       }
@@ -196,7 +200,7 @@ final class DynamicArray[A] private (
   def removeValueByRef(value: A): Boolean = boundary {
     var i = 0
     while (i < _size) {
-      if (_items(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) {
+      if (mk.get(_items, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) {
         removeIndex(i)
         boundary.break(true)
       }
@@ -220,8 +224,7 @@ final class DynamicArray[A] private (
       }
       _size -= n
       // Null vacated slots to allow GC
-      if (_items.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(_items.asInstanceOf[Array[AnyRef]], _size, _size + n, null)
+      mk.nullOutRange(_items, _size, _size + n)
     }
   }
 
@@ -232,7 +235,7 @@ final class DynamicArray[A] private (
     var changed = false
     var i       = _size - 1
     while (i >= 0) {
-      if (check.contains(_items(i))) {
+      if (check.contains(mk.get(_items, i))) {
         removeIndex(i)
         changed = true
       }
@@ -248,7 +251,7 @@ final class DynamicArray[A] private (
     var changed = false
     var i       = _size - 1
     while (i >= 0) {
-      if (check.containsByRef(_items(i))) {
+      if (check.containsByRef(mk.get(_items, i))) {
         removeIndex(i)
         changed = true
       }
@@ -262,9 +265,9 @@ final class DynamicArray[A] private (
     if (_size == 0) throw new IndexOutOfBoundsException("Array is empty.")
     modified()
     _size -= 1
-    val value = _items(_size)
+    val value = mk.get(_items, _size)
     // Null the vacated slot to allow GC
-    if (_items.isInstanceOf[Array[AnyRef]]) _items.asInstanceOf[Array[AnyRef]](_size) = null
+    mk.nullOut(_items, _size)
     value
   }
 
@@ -272,8 +275,7 @@ final class DynamicArray[A] private (
   def clear(): Unit = {
     modified()
     // Null reference-type array slots to allow GC
-    if (_items.isInstanceOf[Array[AnyRef]])
-      java.util.Arrays.fill(_items.asInstanceOf[Array[AnyRef]], 0, _size, null)
+    mk.nullOutRange(_items, 0, _size)
     _size = 0
   }
 
@@ -282,8 +284,7 @@ final class DynamicArray[A] private (
     if (newSize < _size) {
       modified()
       // Null vacated reference-type slots to allow GC
-      if (_items.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(_items.asInstanceOf[Array[AnyRef]], newSize, _size, null)
+      mk.nullOutRange(_items, newSize, _size)
       _size = newSize
     }
 
@@ -339,7 +340,7 @@ final class DynamicArray[A] private (
   def indexOf(value: A): Int = boundary {
     var i = 0
     while (i < _size) {
-      if (_items(i) == value) boundary.break(i)
+      if (mk.elemEquals(mk.get(_items, i), value)) boundary.break(i)
       i += 1
     }
     -1
@@ -349,7 +350,7 @@ final class DynamicArray[A] private (
   def indexOfByRef(value: A): Int = boundary {
     var i = 0
     while (i < _size) {
-      if (_items(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(i)
+      if (mk.get(_items, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(i)
       i += 1
     }
     -1
@@ -359,7 +360,7 @@ final class DynamicArray[A] private (
   def lastIndexOf(value: A): Int = boundary {
     var i = _size - 1
     while (i >= 0) {
-      if (_items(i) == value) boundary.break(i)
+      if (mk.elemEquals(mk.get(_items, i), value)) boundary.break(i)
       i -= 1
     }
     -1
@@ -369,7 +370,7 @@ final class DynamicArray[A] private (
   def lastIndexOfByRef(value: A): Int = boundary {
     var i = _size - 1
     while (i >= 0) {
-      if (_items(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(i)
+      if (mk.get(_items, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(i)
       i -= 1
     }
     -1
@@ -382,7 +383,7 @@ final class DynamicArray[A] private (
     val i = indexOf(value)
     if (i >= 0) {
       modified()
-      _items(i) = replacement
+      mk.set(_items, i, replacement)
       true
     } else {
       false
@@ -394,7 +395,7 @@ final class DynamicArray[A] private (
     val i = indexOfByRef(value)
     if (i >= 0) {
       modified()
-      _items(i) = replacement
+      mk.set(_items, i, replacement)
       true
     } else {
       false
@@ -406,9 +407,9 @@ final class DynamicArray[A] private (
     var count = 0
     var i     = 0
     while (i < _size) {
-      if (_items(i) == value) {
+      if (mk.elemEquals(mk.get(_items, i), value)) {
         if (count == 0) modified()
-        _items(i) = replacement
+        mk.set(_items, i, replacement)
         count += 1
       }
       i += 1
@@ -421,9 +422,9 @@ final class DynamicArray[A] private (
     var count = 0
     var i     = 0
     while (i < _size) {
-      if (_items(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) {
+      if (mk.get(_items, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) {
         if (count == 0) modified()
-        _items(i) = replacement
+        mk.set(_items, i, replacement)
         count += 1
       }
       i += 1
@@ -438,9 +439,9 @@ final class DynamicArray[A] private (
     if (first >= _size) throw new IndexOutOfBoundsException("first can't be >= size: " + first + " >= " + _size)
     if (second >= _size) throw new IndexOutOfBoundsException("second can't be >= size: " + second + " >= " + _size)
     modified()
-    val tmp = _items(first)
-    _items(first) = _items(second)
-    _items(second) = tmp
+    val tmp = mk.get(_items, first)
+    mk.set(_items, first, mk.get(_items, second))
+    mk.set(_items, second, tmp)
   }
 
   /** Reverses the order of all elements. */
@@ -449,9 +450,9 @@ final class DynamicArray[A] private (
     var i = 0
     var j = _size - 1
     while (i < j) {
-      val tmp = _items(i)
-      _items(i) = _items(j)
-      _items(j) = tmp
+      val tmp = mk.get(_items, i)
+      mk.set(_items, i, mk.get(_items, j))
+      mk.set(_items, j, tmp)
       i += 1
       j -= 1
     }
@@ -463,9 +464,9 @@ final class DynamicArray[A] private (
     var i = _size - 1
     while (i > 0) {
       val ii  = math.MathUtils.random(i)
-      val tmp = _items(i)
-      _items(i) = _items(ii)
-      _items(ii) = tmp
+      val tmp = mk.get(_items, i)
+      mk.set(_items, i, mk.get(_items, ii))
+      mk.set(_items, ii, tmp)
       i -= 1
     }
   }
@@ -473,14 +474,14 @@ final class DynamicArray[A] private (
   /** Sorts elements using the provided `Ordering`. Delegates to `Sort.sort`. */
   def sort()(using ordering: Ordering[A]): Unit = {
     modified()
-    Sort.sort(_items, ordering, 0, _size)
+    Sort.sort(_items, mk, ordering, 0, _size)
   }
 
   /** Sorts elements using an explicit `Ordering`. */
   @targetName("sortWith")
   def sort(ordering: Ordering[A]): Unit = {
     modified()
-    Sort.sort(_items, ordering, 0, _size)
+    Sort.sort(_items, mk, ordering, 0, _size)
   }
 
   /** Selects the nth-lowest element from the array according to Ordering ranking. This might partially sort the array. The array must have a size greater than 0, or an [[SgeError]] will be thrown.
@@ -493,7 +494,7 @@ final class DynamicArray[A] private (
     if (kthLowest < 1) {
       throw IllegalArgumentException("nth_lowest must be greater than 0, 1 = first, 2 = second...")
     }
-    Select.select(_items, ordering, kthLowest, _size)
+    Select.select(_items, mk, ordering, kthLowest, _size)
   }
 
   /** @see
@@ -507,7 +508,7 @@ final class DynamicArray[A] private (
     if (kthLowest < 1) {
       throw IllegalArgumentException("nth_lowest must be greater than 0, 1 = first, 2 = second...")
     }
-    Select.selectIndex(_items, ordering, kthLowest, _size)
+    Select.selectIndex(_items, mk, ordering, kthLowest, _size)
   }
 
   // --- Size management ---
@@ -573,13 +574,13 @@ final class DynamicArray[A] private (
   /** Returns the first element. Throws if empty. */
   def first: A = {
     if (_size == 0) throw new IndexOutOfBoundsException("Array is empty.")
-    _items(0)
+    mk.get(_items, 0)
   }
 
   /** Returns the last element. Throws if empty. */
   def last: A = {
     if (_size == 0) throw new IndexOutOfBoundsException("Array is empty.")
-    _items(_size - 1)
+    mk.get(_items, _size - 1)
   }
 
   /** Alias for `last`. Returns the last element. */
@@ -588,7 +589,7 @@ final class DynamicArray[A] private (
   /** Returns a random element, or `Nullable.empty` if the array is empty. */
   def random(): Nullable[A] =
     if (_size == 0) Nullable.empty[A]
-    else Nullable(_items(math.MathUtils.random(_size - 1)))
+    else Nullable(mk.get(_items, math.MathUtils.random(_size - 1)))
 
   def isEmpty: Boolean = _size == 0
 
@@ -597,12 +598,10 @@ final class DynamicArray[A] private (
   // --- Iteration ---
 
   /** Applies `f` to each element. */
-  def foreach(f: A => Unit): Unit = {
-    var i = 0
-    while (i < _size) {
-      f(_items(i))
-      i += 1
-    }
+  inline def foreach(inline f: A => Unit): Unit = MkArray.withResolved[A, Unit](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_items)
+    var i     = 0
+    while (i < _size) { f(mk0.get(items, i).asInstanceOf[A]); i += 1 }
   }
 
   /** Returns an `Iterator` over all elements. Supports `for` comprehensions. */
@@ -611,59 +610,69 @@ final class DynamicArray[A] private (
     private val len = _size
     def hasNext: Boolean = i < len
     def next():  A       = {
-      val v = _items(i); i += 1; v
+      val v = mk.get(_items, i); i += 1; v
     }
   }
 
   /** Returns true if any element satisfies `p`. */
-  def exists(p: A => Boolean): Boolean = boundary {
-    var i = 0
-    while (i < _size) {
-      if (p(_items(i))) boundary.break(true)
+  inline def exists(inline p: A => Boolean): Boolean = MkArray.withResolved[A, Boolean](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_items)
+    var i     = 0
+    var found = false
+    while (i < _size && !found) {
+      if (p(mk0.get(items, i).asInstanceOf[A])) found = true
       i += 1
     }
-    false
+    found
   }
 
   /** Returns the first element satisfying `p`, or `Nullable.empty`. */
-  def find(p: A => Boolean): Nullable[A] = boundary {
-    var i = 0
-    while (i < _size) {
-      if (p(_items(i))) boundary.break(Nullable(_items(i)))
+  inline def find(inline p: A => Boolean): Nullable[A] = MkArray.withResolved[A, Nullable[A]](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items  = mk0.castArray(_items)
+    var i      = 0
+    var result = Nullable.empty[A]
+    while (i < _size && result.isEmpty) {
+      val elem = mk0.get(items, i).asInstanceOf[A]
+      if (p(elem)) result = Nullable(elem)
       i += 1
     }
-    Nullable.empty[A]
+    result
   }
 
   /** Returns the number of elements satisfying `p`. */
-  def count(p: A => Boolean): Int = {
-    var c = 0
-    var i = 0
+  inline def count(inline p: A => Boolean): Int = MkArray.withResolved[A, Int](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_items)
+    var c     = 0
+    var i     = 0
     while (i < _size) {
-      if (p(_items(i))) c += 1
+      if (p(mk0.get(items, i).asInstanceOf[A])) c += 1
       i += 1
     }
     c
   }
 
   /** Returns true if all elements satisfy `p`. Returns true for an empty array. */
-  def forall(p: A => Boolean): Boolean = boundary {
-    var i = 0
-    while (i < _size) {
-      if (!p(_items(i))) boundary.break(false)
+  inline def forall(inline p: A => Boolean): Boolean = MkArray.withResolved[A, Boolean](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items  = mk0.castArray(_items)
+    var i      = 0
+    var result = true
+    while (i < _size && result) {
+      if (!p(mk0.get(items, i).asInstanceOf[A])) result = false
       i += 1
     }
-    true
+    result
   }
 
   /** Returns the index of the first element satisfying `p`, or -1. */
-  def indexWhere(p: A => Boolean): Int = boundary {
-    var i = 0
-    while (i < _size) {
-      if (p(_items(i))) boundary.break(i)
+  inline def indexWhere(inline p: A => Boolean): Int = MkArray.withResolved[A, Int](mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items  = mk0.castArray(_items)
+    var i      = 0
+    var result = -1
+    while (i < _size && result == -1) {
+      if (p(mk0.get(items, i).asInstanceOf[A])) result = i
       i += 1
     }
-    -1
+    result
   }
 
   // --- Operator aliases (ArrayBuffer compatibility) ---
@@ -692,7 +701,7 @@ final class DynamicArray[A] private (
       var h = 1
       var i = 0
       while (i < _size) {
-        val elem = _items(i)
+        val elem = mk.get(_items, i)
         h = 31 * h + (if (Nullable(elem.asInstanceOf[AnyRef]).isEmpty) 0 else elem.hashCode())
         i += 1
       }
@@ -707,7 +716,7 @@ final class DynamicArray[A] private (
         var i     = 0
         var equal = true
         while (i < _size && equal) {
-          if (_items(i) != other._items(i)) equal = false
+          if (mk.get(_items, i) != other._items(i)) equal = false
           i += 1
         }
         equal
@@ -725,7 +734,7 @@ final class DynamicArray[A] private (
         var i     = 0
         var equal = true
         while (i < _size && equal) {
-          if (!(_items(i).asInstanceOf[AnyRef] eq other._items(i).asInstanceOf[AnyRef])) equal = false
+          if (!(mk.get(_items, i).asInstanceOf[AnyRef] eq other._items(i).asInstanceOf[AnyRef])) equal = false
           i += 1
         }
         equal
@@ -743,7 +752,7 @@ final class DynamicArray[A] private (
 
         private def findNext(): A = {
           while (index < _size) {
-            val item = _items(index)
+            val item = mk.get(_items, index)
             index += 1
             if (predicate(item)) return item
           }
@@ -770,11 +779,11 @@ final class DynamicArray[A] private (
     else {
       val sb = new StringBuilder()
       sb.append('[')
-      sb.append(_items(0))
+      sb.append(mk.get(_items, 0))
       var i = 1
       while (i < _size) {
         sb.append(separator)
-        sb.append(_items(i))
+        sb.append(mk.get(_items, i))
         i += 1
       }
       sb.append(']')
@@ -816,13 +825,13 @@ object DynamicArray {
 
   /** Creates a DynamicArray with the given order mode and capacity. */
   inline def apply[A](preserveOrder: Boolean, capacity: Int): DynamicArray[A] = {
-    val mk = summonMkArray[A]
+    val mk = summonInline[MkArray[A]]
     create(mk, capacity, preserveOrder)
   }
 
   /** Creates a DynamicArray by copying elements from a plain array. */
   inline def from[A](array: Array[A]): DynamicArray[A] = {
-    val mk = summonMkArray[A]
+    val mk = summonInline[MkArray[A]]
     copyFrom(mk, array)
   }
 
@@ -835,7 +844,7 @@ object DynamicArray {
 
   /** Creates a DynamicArray that wraps an existing array (no copy). */
   inline def wrap[A](array: Array[A]): DynamicArray[A] = {
-    val mk = summonMkArray[A]
+    val mk = summonInline[MkArray[A]]
     wrapWith(mk, array)
   }
 
@@ -864,8 +873,4 @@ object DynamicArray {
   private def wrapWith[A](mk: MkArray[A], array: Array[A]): DynamicArray[A] =
     new DynamicArray[A](mk, array, array.length, true)
 
-  /** Resolves MkArray at compile time using summonFrom. */
-  private inline def summonMkArray[A]: MkArray[A] = summonFrom { case mk: MkArray[A] =>
-    mk
-  }
 }
