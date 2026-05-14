@@ -31,20 +31,22 @@ package util
   */
 final class QuickSelect[T] {
   private var array: Array[T]    = scala.compiletime.uninitialized
+  private var mk:    MkArray[T]  = scala.compiletime.uninitialized
   private var comp:  Ordering[T] = scala.compiletime.uninitialized
 
-  def select(items: Array[T], comp: Ordering[T], n: Int, size: Int): Int = {
+  def select(items: Array[T], mk: MkArray[T], comp: Ordering[T], n: Int, size: Int): Int = {
     this.array = items
+    this.mk = mk
     this.comp = comp
     recursiveSelect(0, size - 1, n)
   }
 
   private def partition(left: Int, right: Int, pivot: Int): Int = {
-    val pivotValue = array(pivot)
+    val pivotValue = mk.get(array, pivot)
     swap(right, pivot)
     var storage = left
     for (i <- left until right)
-      if (comp.compare(array(i), pivotValue) < 0) {
+      if (comp.compare(mk.get(array, i), pivotValue) < 0) {
         swap(storage, i)
         storage += 1
       }
@@ -69,10 +71,10 @@ final class QuickSelect[T] {
 
   /** Median of Three has the potential to outperform a random pivot, especially for partially sorted arrays */
   private def medianOfThreePivot(leftIdx: Int, rightIdx: Int): Int = {
-    val left   = array(leftIdx)
+    val left   = mk.get(array, leftIdx)
     val midIdx = (leftIdx + rightIdx) / 2
-    val mid    = array(midIdx)
-    val right  = array(rightIdx)
+    val mid    = mk.get(array, midIdx)
+    val right  = mk.get(array, rightIdx)
 
     // spaghetti median of three algorithm
     // does at most 3 comparisons
@@ -96,8 +98,8 @@ final class QuickSelect[T] {
   }
 
   private def swap(left: Int, right: Int): Unit = {
-    val tmp = array(left)
-    array(left) = array(right)
-    array(right) = tmp
+    val tmp = mk.get(array, left)
+    mk.set(array, left, mk.get(array, right))
+    mk.set(array, right, tmp)
   }
 }

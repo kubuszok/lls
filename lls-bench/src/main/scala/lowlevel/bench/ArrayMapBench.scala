@@ -17,8 +17,8 @@ class ArrayMapBench {
   @Param(Array("100", "1000"))
   var size: Int = uninitialized
 
-  private var keys: Array[String]          = uninitialized
-  private var map:  ArrayMap[String, Int]   = uninitialized
+  private var keys: Array[String]         = uninitialized
+  private var map:  ArrayMap[String, Int] = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {

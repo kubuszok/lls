@@ -18,9 +18,9 @@ class ObjectMapBench {
   var size: Int = uninitialized
 
   private var keys:    Array[String]          = uninitialized
-  private var map:     ObjectMap[String, Int]  = uninitialized
-  private var intMap:  ObjectMap[Int, Int]     = uninitialized
-  private var nextKey: Int                     = uninitialized
+  private var map:     ObjectMap[String, Int] = uninitialized
+  private var intMap:  ObjectMap[Int, Int]    = uninitialized
+  private var nextKey: Int                    = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {

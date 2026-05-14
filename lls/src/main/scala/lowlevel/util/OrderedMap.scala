@@ -24,7 +24,8 @@
 package lowlevel
 package util
 
-import scala.compiletime.summonFrom
+import scala.annotation.publicInBinary
+import scala.compiletime.summonInline
 
 /** An `ObjectMap` that also stores keys in a `DynamicArray` using the insertion order. Null keys are not allowed. No allocation is done except when growing the table size.
   *
@@ -35,9 +36,12 @@ import scala.compiletime.summonFrom
   *   Nathan Sweet, Tommy Ettinger (original implementation)
   */
 final class OrderedMap[K, V] private (
-  private val map:   ObjectMap[K, V],
-  private val _keys: DynamicArray[K]
+  map0:  ObjectMap[K, V],
+  keys0: DynamicArray[K]
 ) {
+
+  @publicInBinary private[util] val map:   ObjectMap[K, V] = map0
+  @publicInBinary private[util] val _keys: DynamicArray[K] = keys0
 
   // --- Core ---
 
@@ -180,29 +184,29 @@ final class OrderedMap[K, V] private (
   // which are idiomatic Scala and avoid iterator-pool allocation complexity. All iteration functionality is preserved.
 
   /** Calls the given function for each key-value pair in insertion order. */
-  def foreachEntry(f: (K, V) => Unit): Unit = {
-    var i = 0
-    while (i < _keys.size) {
-      val key = _keys(i)
+  inline def foreachEntry(inline f: (K, V) => Unit): Unit = MkArray.withResolved[K, Unit](_keys.mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_keys._items)
+    var i     = 0
+    while (i < _keys._size) {
+      val key = mk0.get(items, i).asInstanceOf[K]
       f(key, map.getUnsafe(key))
       i += 1
     }
   }
 
   /** Calls the given function for each key in insertion order. */
-  def foreachKey(f: K => Unit): Unit = {
-    var i = 0
-    while (i < _keys.size) {
-      f(_keys(i))
-      i += 1
-    }
+  inline def foreachKey(inline f: K => Unit): Unit = MkArray.withResolved[K, Unit](_keys.mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_keys._items)
+    var i     = 0
+    while (i < _keys._size) { f(mk0.get(items, i).asInstanceOf[K]); i += 1 }
   }
 
   /** Calls the given function for each value in insertion order. */
-  def foreachValue(f: V => Unit): Unit = {
-    var i = 0
-    while (i < _keys.size) {
-      f(map.getUnsafe(_keys(i)))
+  inline def foreachValue(inline f: V => Unit): Unit = MkArray.withResolved[K, Unit](_keys.mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_keys._items)
+    var i     = 0
+    while (i < _keys._size) {
+      f(map.getUnsafe(mk0.get(items, i).asInstanceOf[K]))
       i += 1
     }
   }
@@ -291,8 +295,6 @@ object OrderedMap {
     new OrderedMap[K, V](map, keys)
   }
 
-  /** Resolves MkArray at compile time using summonFrom. */
-  private inline def summonMkArray[A]: MkArray[A] = summonFrom { case mk: MkArray[A] =>
-    mk
-  }
+  /** Resolves MkArray at compile time using summonInline. */
+  private inline def summonMkArray[A]: MkArray[A] = summonInline[MkArray[A]]
 }

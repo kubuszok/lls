@@ -24,7 +24,7 @@
 package lowlevel
 package util
 
-import scala.compiletime.summonFrom
+import scala.compiletime.summonInline
 import scala.util.boundary
 
 /** An ordered or unordered map of objects. This implementation uses arrays to store the keys and values, which means gets do a comparison for each key in the map. This is slower than a typical hash
@@ -61,12 +61,12 @@ final class ArrayMap[K, V] private (
   def put(key: K, value: V): Int = {
     val existingIdx = indexOfKey(key)
     if (existingIdx >= 0) {
-      valArray(existingIdx) = value
+      mkV.set(valArray, existingIdx, value)
       existingIdx
     } else {
       if (_size == keyArray.length) grow()
-      keyArray(_size) = key
-      valArray(_size) = value
+      mkK.set(keyArray, _size, key)
+      mkV.set(valArray, _size, value)
       _size += 1
       _size - 1
     }
@@ -83,8 +83,8 @@ final class ArrayMap[K, V] private (
     }
     System.arraycopy(keyArray, index, keyArray, index + 1, _size - index)
     System.arraycopy(valArray, index, valArray, index + 1, _size - index)
-    keyArray(index) = key
-    valArray(index) = value
+    mkK.set(keyArray, index, key)
+    mkV.set(valArray, index, value)
     _size += 1
     index
   }
@@ -92,37 +92,37 @@ final class ArrayMap[K, V] private (
   /** Returns the value for the specified key, or `Nullable.empty` if not found. */
   def get(key: K): Nullable[V] = {
     val i = indexOfKey(key)
-    if (i < 0) Nullable.empty[V] else Nullable(valArray(i))
+    if (i < 0) Nullable.empty[V] else Nullable(mkV.get(valArray, i))
   }
 
   /** Returns the value for the specified key, or the default value if not found. */
   def get(key: K, defaultValue: V): V = {
     val i = indexOfKey(key)
-    if (i < 0) defaultValue else valArray(i)
+    if (i < 0) defaultValue else mkV.get(valArray, i)
   }
 
   /** Returns the key at the given index. */
   def getKeyAt(index: Int): K = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
-    keyArray(index)
+    mkK.get(keyArray, index)
   }
 
   /** Returns the value at the given index. */
   def getValueAt(index: Int): V = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
-    valArray(index)
+    mkV.get(valArray, index)
   }
 
   /** Returns the first key. Throws if the map is empty. */
   def firstKey: K = {
     if (_size == 0) throw new IllegalStateException("Map is empty.")
-    keyArray(0)
+    mkK.get(keyArray, 0)
   }
 
   /** Returns the first value. Throws if the map is empty. */
   def firstValue: V = {
     if (_size == 0) throw new IllegalStateException("Map is empty.")
-    valArray(0)
+    mkV.get(valArray, 0)
   }
 
   /** Returns the key for the specified value. Note this does a comparison of each value in reverse order until the specified value is found.
@@ -133,12 +133,12 @@ final class ArrayMap[K, V] private (
     var i = _size - 1
     if (identity) {
       while (i >= 0) {
-        if (valArray(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(Nullable(keyArray(i)))
+        if (mkV.get(valArray, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(Nullable(mkK.get(keyArray, i)))
         i -= 1
       }
     } else {
       while (i >= 0) {
-        if (value == valArray(i)) boundary.break(Nullable(keyArray(i)))
+        if (mkV.elemEquals(value, mkV.get(valArray, i))) boundary.break(Nullable(mkK.get(keyArray, i)))
         i -= 1
       }
     }
@@ -148,13 +148,13 @@ final class ArrayMap[K, V] private (
   /** Replaces the key at the given index, keeping the same value. */
   def setKeyAt(index: Int, key: K): Unit = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
-    keyArray(index) = key
+    mkK.set(keyArray, index, key)
   }
 
   /** Replaces the value at the given index, keeping the same key. */
   def setValueAt(index: Int, value: V): Unit = {
     if (index >= _size) throw new IndexOutOfBoundsException("index can't be >= size: " + index + " >= " + _size)
-    valArray(index) = value
+    mkV.set(valArray, index, value)
   }
 
   /** Inserts a key-value pair at the given index. If `preserveOrder` is true, existing elements are shifted; otherwise the element at the given index is moved to the end.
@@ -166,12 +166,12 @@ final class ArrayMap[K, V] private (
       System.arraycopy(keyArray, index, keyArray, index + 1, _size - index)
       System.arraycopy(valArray, index, valArray, index + 1, _size - index)
     } else {
-      keyArray(_size) = keyArray(index)
-      valArray(_size) = valArray(index)
+      mkK.set(keyArray, _size, mkK.get(keyArray, index))
+      mkV.set(valArray, _size, mkV.get(valArray, index))
     }
     _size += 1
-    keyArray(index) = key
-    valArray(index) = value
+    mkK.set(keyArray, index, key)
+    mkV.set(valArray, index, value)
   }
 
   /** Removes the key-value pair for the specified key, returning the value or `Nullable.empty`. */
@@ -179,7 +179,7 @@ final class ArrayMap[K, V] private (
     val i = indexOfKey(key)
     if (i < 0) Nullable.empty[V]
     else {
-      val value = valArray(i)
+      val value = mkV.get(valArray, i)
       removeIndex(i)
       Nullable(value)
     }
@@ -193,12 +193,12 @@ final class ArrayMap[K, V] private (
       System.arraycopy(keyArray, index + 1, keyArray, index, _size - index)
       System.arraycopy(valArray, index + 1, valArray, index, _size - index)
     } else {
-      keyArray(index) = keyArray(_size)
-      valArray(index) = valArray(_size)
+      mkK.set(keyArray, index, mkK.get(keyArray, _size))
+      mkV.set(valArray, index, mkV.get(valArray, _size))
     }
     // Null the vacated last slot to allow GC
-    if (keyArray.isInstanceOf[Array[AnyRef]]) keyArray.asInstanceOf[Array[AnyRef]](_size) = null
-    if (valArray.isInstanceOf[Array[AnyRef]]) valArray.asInstanceOf[Array[AnyRef]](_size) = null
+    mkK.nullOut(keyArray, _size)
+    mkV.nullOut(valArray, _size)
   }
 
   /** Removes the first key-value pair with the specified value. Returns true if found.
@@ -218,7 +218,7 @@ final class ArrayMap[K, V] private (
   def indexOfKey(key: K): Int = boundary {
     var i = 0
     while (i < _size) {
-      if (keyArray(i) == key) boundary.break(i)
+      if (mkK.elemEquals(mkK.get(keyArray, i), key)) boundary.break(i)
       i += 1
     }
     -1
@@ -235,12 +235,12 @@ final class ArrayMap[K, V] private (
     var i = 0
     if (identity) {
       while (i < _size) {
-        if (valArray(i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(i)
+        if (mkV.get(valArray, i).asInstanceOf[AnyRef] eq value.asInstanceOf[AnyRef]) boundary.break(i)
         i += 1
       }
     } else {
       while (i < _size) {
-        if (value == valArray(i)) boundary.break(i)
+        if (mkV.elemEquals(value, mkV.get(valArray, i))) boundary.break(i)
         i += 1
       }
     }
@@ -294,10 +294,8 @@ final class ArrayMap[K, V] private (
   /** Removes all key-value pairs. */
   def clear(): Unit = {
     // Null reference-type arrays to allow GC before resetting size
-    if (keyArray.isInstanceOf[Array[AnyRef]])
-      java.util.Arrays.fill(keyArray.asInstanceOf[Array[AnyRef]], 0, _size, null)
-    if (valArray.isInstanceOf[Array[AnyRef]])
-      java.util.Arrays.fill(valArray.asInstanceOf[Array[AnyRef]], 0, _size, null)
+    mkK.nullOutRange(keyArray, 0, _size)
+    mkV.nullOutRange(valArray, 0, _size)
     _size = 0
   }
 
@@ -322,13 +320,13 @@ final class ArrayMap[K, V] private (
   /** Returns the last key. Throws if empty. */
   def peekKey: K = {
     if (_size == 0) throw new IndexOutOfBoundsException("ArrayMap is empty.")
-    keyArray(_size - 1)
+    mkK.get(keyArray, _size - 1)
   }
 
   /** Returns the last value. Throws if empty. */
   def peekValue: V = {
     if (_size == 0) throw new IndexOutOfBoundsException("ArrayMap is empty.")
-    valArray(_size - 1)
+    mkV.get(valArray, _size - 1)
   }
 
   // --- Reorder ---
@@ -338,12 +336,12 @@ final class ArrayMap[K, V] private (
     var i = 0
     var j = _size - 1
     while (i < j) {
-      val tmpK = keyArray(i)
-      keyArray(i) = keyArray(j)
-      keyArray(j) = tmpK
-      val tmpV = valArray(i)
-      valArray(i) = valArray(j)
-      valArray(j) = tmpV
+      val tmpK = mkK.get(keyArray, i)
+      mkK.set(keyArray, i, mkK.get(keyArray, j))
+      mkK.set(keyArray, j, tmpK)
+      val tmpV = mkV.get(valArray, i)
+      mkV.set(valArray, i, mkV.get(valArray, j))
+      mkV.set(valArray, j, tmpV)
       i += 1
       j -= 1
     }
@@ -354,12 +352,12 @@ final class ArrayMap[K, V] private (
     var i = _size - 1
     while (i > 0) {
       val ii   = math.MathUtils.random(i)
-      val tmpK = keyArray(i)
-      keyArray(i) = keyArray(ii)
-      keyArray(ii) = tmpK
-      val tmpV = valArray(i)
-      valArray(i) = valArray(ii)
-      valArray(ii) = tmpV
+      val tmpK = mkK.get(keyArray, i)
+      mkK.set(keyArray, i, mkK.get(keyArray, ii))
+      mkK.set(keyArray, ii, tmpK)
+      val tmpV = mkV.get(valArray, i)
+      mkV.set(valArray, i, mkV.get(valArray, ii))
+      mkV.set(valArray, ii, tmpV)
       i -= 1
     }
   }
@@ -368,10 +366,8 @@ final class ArrayMap[K, V] private (
   def truncate(newSize: Int): Unit =
     if (newSize < _size) {
       // Null vacated reference-type slots to allow GC
-      if (keyArray.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(keyArray.asInstanceOf[Array[AnyRef]], newSize, _size, null)
-      if (valArray.isInstanceOf[Array[AnyRef]])
-        java.util.Arrays.fill(valArray.asInstanceOf[Array[AnyRef]], newSize, _size, null)
+      mkK.nullOutRange(keyArray, newSize, _size)
+      mkV.nullOutRange(valArray, newSize, _size)
       _size = newSize
     }
 
@@ -382,31 +378,34 @@ final class ArrayMap[K, V] private (
   // All iteration functionality (entries, keys, values) is preserved; only the mechanism differs.
 
   /** Calls the given function for each key-value pair. */
-  def foreachEntry(f: (K, V) => Unit): Unit = {
-    var i = 0
-    while (i < _size) {
-      f(keyArray(i), valArray(i))
-      i += 1
+  inline def foreachEntry(inline f: (K, V) => Unit): Unit =
+    MkArray.withResolved[K, Unit](mkK) { [BK, MkK <: MkArray[BK]] => (mk0K: MkK) =>
+      MkArray.withResolved[V, Unit](mkV) { [BV, MkV <: MkArray[BV]] => (mk0V: MkV) =>
+        val keys = mk0K.castArray(keyArray)
+        val vals = mk0V.castArray(valArray)
+        var i    = 0
+        while (i < _size) {
+          f(mk0K.get(keys, i).asInstanceOf[K], mk0V.get(vals, i).asInstanceOf[V])
+          i += 1
+        }
+      }
     }
-  }
 
   /** Calls the given function for each key. */
-  def foreachKey(f: K => Unit): Unit = {
-    var i = 0
-    while (i < _size) {
-      f(keyArray(i))
-      i += 1
+  inline def foreachKey(inline f: K => Unit): Unit =
+    MkArray.withResolved[K, Unit](mkK) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+      val keys = mk0.castArray(keyArray)
+      var i    = 0
+      while (i < _size) { f(mk0.get(keys, i).asInstanceOf[K]); i += 1 }
     }
-  }
 
   /** Calls the given function for each value. */
-  def foreachValue(f: V => Unit): Unit = {
-    var i = 0
-    while (i < _size) {
-      f(valArray(i))
-      i += 1
+  inline def foreachValue(inline f: V => Unit): Unit =
+    MkArray.withResolved[V, Unit](mkV) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+      val vals = mk0.castArray(valArray)
+      var i    = 0
+      while (i < _size) { f(mk0.get(vals, i).asInstanceOf[V]); i += 1 }
     }
-  }
 
   // --- Standard ---
 
@@ -414,8 +413,8 @@ final class ArrayMap[K, V] private (
     var h = 1
     var i = 0
     while (i < _size) {
-      h = 31 * h + keyArray(i).hashCode()
-      h = 31 * h + valArray(i).hashCode()
+      h = 31 * h + mkK.get(keyArray, i).hashCode()
+      h = 31 * h + mkV.get(valArray, i).hashCode()
       i += 1
     }
     h
@@ -430,7 +429,7 @@ final class ArrayMap[K, V] private (
         var equal    = true
         var i        = 0
         while (i < _size && equal) {
-          if (keyArray(i) != otherMap.keyArray(i) || valArray(i) != otherMap.valArray(i)) equal = false
+          if (!mkK.elemEquals(mkK.get(keyArray, i), otherMap.mkK.get(otherMap.keyArray, i)) || !mkV.elemEquals(mkV.get(valArray, i), otherMap.mkV.get(otherMap.valArray, i))) equal = false
           i += 1
         }
         equal
@@ -448,8 +447,8 @@ final class ArrayMap[K, V] private (
         var equal    = true
         var i        = 0
         while (i < _size && equal) {
-          val otherVal = otherMap.get(keyArray(i))
-          if (otherVal.isEmpty || !(valArray(i).asInstanceOf[AnyRef] eq otherVal.get.asInstanceOf[AnyRef]))
+          val otherVal = otherMap.get(mkK.get(keyArray, i))
+          if (otherVal.isEmpty || !(mkV.get(valArray, i).asInstanceOf[AnyRef] eq otherVal.get.asInstanceOf[AnyRef]))
             equal = false
           i += 1
         }
@@ -466,9 +465,9 @@ final class ArrayMap[K, V] private (
       var i = 0
       while (i < _size) {
         if (i > 0) sb.append(", ")
-        sb.append(keyArray(i))
+        sb.append(mkK.get(keyArray, i))
         sb.append('=')
-        sb.append(valArray(i))
+        sb.append(mkV.get(valArray, i))
         i += 1
       }
       sb.append('}')
@@ -518,8 +517,6 @@ object ArrayMap {
   ): ArrayMap[K, V] =
     new ArrayMap[K, V](mkK, mkV, mkK.create(capacity), mkV.create(capacity), 0, preserveOrder)
 
-  /** Resolves MkArray at compile time using summonFrom. */
-  private inline def summonMkArray[A]: MkArray[A] = summonFrom { case mk: MkArray[A] =>
-    mk
-  }
+  /** Resolves MkArray at compile time using summonInline. */
+  private inline def summonMkArray[A]: MkArray[A] = summonInline[MkArray[A]]
 }

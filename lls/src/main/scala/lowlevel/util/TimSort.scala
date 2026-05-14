@@ -53,6 +53,9 @@ final class TimSort[T] {
   /** The array being sorted. */
   private var a: Array[T] = scala.compiletime.uninitialized
 
+  /** MkArray accessor for unboxed element access. */
+  private var mk: MkArray[T] = scala.compiletime.uninitialized
+
   /** The comparator for this sort. */
   private var c: Ordering[T] = scala.compiletime.uninitialized
 
@@ -74,17 +77,21 @@ final class TimSort[T] {
   private val runBase:   Array[Int] = new Array[Int](40)
   private val runLen:    Array[Int] = new Array[Int](40)
 
-  def doSort(a: Array[T], c: Ordering[T], lo: Int, hi: Int): Unit = {
+  def doSort(a: Array[T], c: Ordering[T], lo: Int, hi: Int): Unit =
+    doSort(a, MkArray.anyRef[AnyRef](using scala.reflect.classTag[AnyRef]).asInstanceOf[MkArray[T]], c, lo, hi)
+
+  def doSort(a: Array[T], mk: MkArray[T], c: Ordering[T], lo: Int, hi: Int): Unit = {
     stackSize = 0
     TimSort.rangeCheck(a.length, lo, hi)
     val nRemaining = hi - lo
     if (nRemaining < 2) () // Arrays of size 0 and 1 are always sorted
     else if (nRemaining < TimSort.MIN_MERGE) {
       // If array is small, do a "mini-TimSort" with no merges
-      val initRunLen = TimSort.countRunAndMakeAscending(a, lo, hi, c)
-      TimSort.binarySort(a, lo, hi, lo + initRunLen, c)
+      val initRunLen = TimSort.countRunAndMakeAscending(a, mk, lo, hi, c)
+      TimSort.binarySort(a, mk, lo, hi, lo + initRunLen, c)
     } else {
       this.a = a
+      this.mk = mk
       this.c = c
       tmpCount = 0
       // Allocate tmp with same component type as source array so System.arraycopy works for primitives
@@ -99,12 +106,12 @@ final class TimSort[T] {
 
       while (remaining != 0) {
         // Identify next run
-        var runLen = TimSort.countRunAndMakeAscending(a, currentLo, hi, c)
+        var runLen = TimSort.countRunAndMakeAscending(a, mk, currentLo, hi, c)
 
         // If run is short, extend to min(minRun, remaining)
         if (runLen < minRun) {
           val force = if (remaining <= minRun) remaining else minRun
-          TimSort.binarySort(a, currentLo, currentLo + force, currentLo + runLen, c)
+          TimSort.binarySort(a, mk, currentLo, currentLo + force, currentLo + runLen, c)
           runLen = force
         }
 
@@ -123,6 +130,7 @@ final class TimSort[T] {
       if (TimSort.DEBUG) assert(stackSize == 1)
 
       this.a = null.asInstanceOf[Array[T]]
+      this.mk = null.asInstanceOf[MkArray[T]]
       this.c = null.asInstanceOf[Ordering[T]]
       // Clear temp storage for GC — only needed for reference arrays (primitive arrays don't hold references)
       if (!this.tmp.getClass.getComponentType.isPrimitive) {
@@ -184,14 +192,14 @@ final class TimSort[T] {
     stackSize -= 1
 
     // Find where the first element of run2 goes in run1
-    val k = TimSort.gallopRight(a(base2), a, base1, len1, 0, c)
+    val k = TimSort.gallopRight(mk.get(a, base2), a, mk, base1, len1, 0, c)
     if (TimSort.DEBUG) assert(k >= 0)
     base1 += k
     len1 -= k
     if (len1 == 0) scala.util.boundary.break(())
 
     // Find where the last element of run1 goes in run2
-    len2 = TimSort.gallopLeft(a(base1 + len1 - 1), a, base2, len2, len2 - 1, c)
+    len2 = TimSort.gallopLeft(mk.get(a, base1 + len1 - 1), a, mk, base2, len2, len2 - 1, c)
     if (TimSort.DEBUG) assert(len2 >= 0)
     if (len2 == 0) scala.util.boundary.break(())
 
@@ -253,6 +261,7 @@ final class TimSort[T] {
 
     // Copy first run into temp array
     val a   = this.a // For performance
+    val mk  = this.mk // For performance
     val tmp = ensureCapacity(len1)
     System.arraycopy(a, _base1, tmp, 0, len1)
 
@@ -261,7 +270,7 @@ final class TimSort[T] {
     var dest    = _base1 // Indexes int a
 
     // Move first element of second run and deal with degenerate cases
-    a(dest) = a(cursor2); dest += 1; cursor2 += 1
+    mk.set(a, dest, mk.get(a, cursor2)); dest += 1; cursor2 += 1
     len2 -= 1
     if (len2 == 0) {
       System.arraycopy(tmp, cursor1, a, dest, len1)
@@ -269,7 +278,7 @@ final class TimSort[T] {
     }
     if (len1 == 1) {
       System.arraycopy(a, cursor2, a, dest, len2)
-      a(dest + len2) = tmp(cursor1) // Last elt of run 1 to end of merge
+      mk.set(a, dest + len2, mk.get(tmp, cursor1)) // Last elt of run 1 to end of merge
       break()
     }
 
@@ -287,14 +296,14 @@ final class TimSort[T] {
       var doContinue = true
       while (doContinue) {
         if (TimSort.DEBUG) assert(len1 > 1 && len2 > 0)
-        if (c.compare(a(cursor2), tmp(cursor1)) < 0) {
-          a(dest) = a(cursor2); dest += 1; cursor2 += 1
+        if (c.compare(mk.get(a, cursor2), mk.get(tmp, cursor1)) < 0) {
+          mk.set(a, dest, mk.get(a, cursor2)); dest += 1; cursor2 += 1
           count2 += 1
           count1 = 0
           len2 -= 1
           if (len2 == 0) { breakOuter = true; doContinue = false }
         } else {
-          a(dest) = tmp(cursor1); dest += 1; cursor1 += 1
+          mk.set(a, dest, mk.get(tmp, cursor1)); dest += 1; cursor1 += 1
           count1 += 1
           count2 = 0
           len1 -= 1
@@ -312,7 +321,7 @@ final class TimSort[T] {
         var gallopContinue = true
         while (gallopContinue) {
           if (TimSort.DEBUG) assert(len1 > 1 && len2 > 0)
-          count1 = TimSort.gallopRight(a(cursor2), tmp, cursor1, len1, 0, c)
+          count1 = TimSort.gallopRight(mk.get(a, cursor2), tmp, mk, cursor1, len1, 0, c)
           if (count1 != 0) {
             System.arraycopy(tmp, cursor1, a, dest, count1)
             dest += count1
@@ -323,13 +332,13 @@ final class TimSort[T] {
             }
           }
           if (gallopContinue) {
-            a(dest) = a(cursor2); dest += 1; cursor2 += 1
+            mk.set(a, dest, mk.get(a, cursor2)); dest += 1; cursor2 += 1
             len2 -= 1
             if (len2 == 0) { done = true; gallopContinue = false }
           }
 
           if (gallopContinue) {
-            count2 = TimSort.gallopLeft(tmp(cursor1), a, cursor2, len2, 0, c)
+            count2 = TimSort.gallopLeft(mk.get(tmp, cursor1), a, mk, cursor2, len2, 0, c)
             if (count2 != 0) {
               System.arraycopy(a, cursor2, a, dest, count2)
               dest += count2
@@ -338,7 +347,7 @@ final class TimSort[T] {
               if (len2 == 0) { done = true; gallopContinue = false }
             }
             if (gallopContinue) {
-              a(dest) = tmp(cursor1); dest += 1; cursor1 += 1
+              mk.set(a, dest, mk.get(tmp, cursor1)); dest += 1; cursor1 += 1
               len1 -= 1
               if (len1 == 1) { done = true; gallopContinue = false }
               else localMinGallop -= 1
@@ -359,7 +368,7 @@ final class TimSort[T] {
     if (len1 == 1) {
       if (TimSort.DEBUG) assert(len2 > 0)
       System.arraycopy(a, cursor2, a, dest, len2)
-      a(dest + len2) = tmp(cursor1) // Last elt of run 1 to end of merge
+      mk.set(a, dest + len2, mk.get(tmp, cursor1)) // Last elt of run 1 to end of merge
     } else if (len1 == 0) {
       throw new IllegalArgumentException("Comparison method violates its general contract!")
     } else {
@@ -388,6 +397,7 @@ final class TimSort[T] {
 
     // Copy second run into temp array
     val a   = this.a // For performance
+    val mk  = this.mk // For performance
     val tmp = ensureCapacity(len2)
     System.arraycopy(a, base2, tmp, 0, len2)
 
@@ -396,7 +406,7 @@ final class TimSort[T] {
     var dest    = base2 + len2 - 1 // Indexes into a
 
     // Move last element of first run and deal with degenerate cases
-    a(dest) = a(cursor1); dest -= 1; cursor1 -= 1
+    mk.set(a, dest, mk.get(a, cursor1)); dest -= 1; cursor1 -= 1
     len1 -= 1
     if (len1 == 0) {
       System.arraycopy(tmp, 0, a, dest - (len2 - 1), len2)
@@ -406,7 +416,7 @@ final class TimSort[T] {
       dest -= len1
       cursor1 -= len1
       System.arraycopy(a, cursor1 + 1, a, dest + 1, len1)
-      a(dest) = tmp(cursor2)
+      mk.set(a, dest, mk.get(tmp, cursor2))
       break()
     }
 
@@ -424,14 +434,14 @@ final class TimSort[T] {
       var doContinue = true
       while (doContinue) {
         if (TimSort.DEBUG) assert(len1 > 0 && len2 > 1)
-        if (c.compare(tmp(cursor2), a(cursor1)) < 0) {
-          a(dest) = a(cursor1); dest -= 1; cursor1 -= 1
+        if (c.compare(mk.get(tmp, cursor2), mk.get(a, cursor1)) < 0) {
+          mk.set(a, dest, mk.get(a, cursor1)); dest -= 1; cursor1 -= 1
           count1 += 1
           count2 = 0
           len1 -= 1
           if (len1 == 0) { breakOuter = true; doContinue = false }
         } else {
-          a(dest) = tmp(cursor2); dest -= 1; cursor2 -= 1
+          mk.set(a, dest, mk.get(tmp, cursor2)); dest -= 1; cursor2 -= 1
           count2 += 1
           count1 = 0
           len2 -= 1
@@ -449,7 +459,7 @@ final class TimSort[T] {
         var gallopContinue = true
         while (gallopContinue) {
           if (TimSort.DEBUG) assert(len1 > 0 && len2 > 1)
-          count1 = len1 - TimSort.gallopRight(tmp(cursor2), a, base1, len1, len1 - 1, c)
+          count1 = len1 - TimSort.gallopRight(mk.get(tmp, cursor2), a, mk, base1, len1, len1 - 1, c)
           if (count1 != 0) {
             dest -= count1
             cursor1 -= count1
@@ -458,13 +468,13 @@ final class TimSort[T] {
             if (len1 == 0) { done = true; gallopContinue = false }
           }
           if (gallopContinue) {
-            a(dest) = tmp(cursor2); dest -= 1; cursor2 -= 1
+            mk.set(a, dest, mk.get(tmp, cursor2)); dest -= 1; cursor2 -= 1
             len2 -= 1
             if (len2 == 1) { done = true; gallopContinue = false }
           }
 
           if (gallopContinue) {
-            count2 = len2 - TimSort.gallopLeft(a(cursor1), tmp, 0, len2, len2 - 1, c)
+            count2 = len2 - TimSort.gallopLeft(mk.get(a, cursor1), tmp, mk, 0, len2, len2 - 1, c)
             if (count2 != 0) {
               dest -= count2
               cursor2 -= count2
@@ -475,7 +485,7 @@ final class TimSort[T] {
               }
             }
             if (gallopContinue) {
-              a(dest) = a(cursor1); dest -= 1; cursor1 -= 1
+              mk.set(a, dest, mk.get(a, cursor1)); dest -= 1; cursor1 -= 1
               len1 -= 1
               if (len1 == 0) { done = true; gallopContinue = false }
               else localMinGallop -= 1
@@ -498,7 +508,7 @@ final class TimSort[T] {
       dest -= len1
       cursor1 -= len1
       System.arraycopy(a, cursor1 + 1, a, dest + 1, len1)
-      a(dest) = tmp(cursor2) // Move first elt of run2 to front of merge
+      mk.set(a, dest, mk.get(tmp, cursor2)) // Move first elt of run2 to front of merge
     } else if (len2 == 0) {
       throw new IllegalArgumentException("Comparison method violates its general contract!")
     } else {
@@ -526,6 +536,9 @@ object TimSort {
   def sort[T](a: Array[T], c: Ordering[T]): Unit =
     sort(a, 0, a.length, c)
 
+  def sort[T](a: Array[T], mk: MkArray[T], c: Ordering[T]): Unit =
+    sort(a, mk, 0, a.length, c)
+
   def sort[T](a: Array[T], lo: Int, hi: Int, c: Nullable[Ordering[T]]): Unit =
     if (c.isEmpty) {
       Arrays.sort(a.asInstanceOf[Array[AnyRef]], lo, hi)
@@ -544,6 +557,21 @@ object TimSort {
         ts.doSort(a, comp, lo, hi)
       }
     }
+
+  def sort[T](a: Array[T], mk: MkArray[T], lo: Int, hi: Int, c: Ordering[T]): Unit = {
+    rangeCheck(a.length, lo, hi)
+    val nRemaining = hi - lo
+    if (nRemaining < 2) () // Arrays of size 0 and 1 are always sorted
+    else if (nRemaining < MIN_MERGE) {
+      // If array is small, do a "mini-TimSort" with no merges
+      val initRunLen = countRunAndMakeAscending(a, mk, lo, hi, c)
+      binarySort(a, mk, lo, hi, lo + initRunLen, c)
+    } else {
+      // March over the array once, left to right, finding natural runs
+      val ts = TimSort[T]()
+      ts.doSort(a, mk, c, lo, hi)
+    }
+  }
 
   /** Sorts the specified portion of the specified array using a binary insertion sort. */
   private def binarySort[T](a: Array[T], lo: Int, hi: Int, start: Int, c: Ordering[T]): Unit = {
@@ -584,6 +612,45 @@ object TimSort {
     }
   }
 
+  /** Sorts the specified portion of the specified array using a binary insertion sort, with unboxed element access via MkArray. */
+  private def binarySort[T](a: Array[T], mk: MkArray[T], lo: Int, hi: Int, start: Int, c: Ordering[T]): Unit = {
+    if (DEBUG) assert(lo <= start && start <= hi)
+    var start_var = start
+    if (start_var == lo) start_var += 1
+
+    while (start_var < hi) {
+      val pivot = mk.get(a, start_var)
+
+      // Set left (and right) to the index where a[start] (pivot) belongs
+      var left  = lo
+      var right = start_var
+      if (DEBUG) assert(left <= right)
+
+      while (left < right) {
+        val mid = (left + right) >>> 1
+        if (c.compare(pivot, mk.get(a, mid)) < 0)
+          right = mid
+        else
+          left = mid + 1
+      }
+      if (DEBUG) assert(left == right)
+
+      val n = start_var - left // The number of elements to move
+      // Switch is just an optimization for arraycopy in default case
+      n match {
+        case 2 =>
+          mk.set(a, left + 2, mk.get(a, left + 1))
+          mk.set(a, left + 1, mk.get(a, left))
+        case 1 =>
+          mk.set(a, left + 1, mk.get(a, left))
+        case _ =>
+          System.arraycopy(a, left, a, left + 1, n)
+      }
+      mk.set(a, left, pivot)
+      start_var += 1
+    }
+  }
+
   /** Returns the length of the run beginning at the specified position in the specified array and reverses the run if it is descending (ensuring that the run will always be ascending when the method
     * returns).
     */
@@ -607,6 +674,27 @@ object TimSort {
     }
   }
 
+  /** Returns the length of the run beginning at the specified position, with unboxed element access via MkArray. */
+  private def countRunAndMakeAscending[T](a: Array[T], mk: MkArray[T], lo: Int, hi: Int, c: Ordering[T]): Int = {
+    if (DEBUG) assert(lo < hi)
+    var runHi = lo + 1
+    if (runHi == hi) 1
+    else {
+      // Find end of run, and reverse range if descending
+      if (c.compare(mk.get(a, runHi), mk.get(a, lo)) < 0) { // Descending
+        runHi += 1
+        while (runHi < hi && c.compare(mk.get(a, runHi), mk.get(a, runHi - 1)) < 0)
+          runHi += 1
+        reverseRange(a, mk, lo, runHi)
+      } else { // Ascending
+        while (runHi < hi && c.compare(mk.get(a, runHi), mk.get(a, runHi - 1)) >= 0)
+          runHi += 1
+      }
+
+      runHi - lo
+    }
+  }
+
   /** Reverse the specified range of the specified array. */
   private def reverseRange[T](a: Array[T], lo: Int, hi: Int): Unit = {
     var i = lo
@@ -615,6 +703,19 @@ object TimSort {
       val t = a(i)
       a(i) = a(j)
       a(j) = t
+      i += 1
+      j -= 1
+    }
+  }
+
+  /** Reverse the specified range of the specified array, with unboxed element access via MkArray. */
+  private def reverseRange[T](a: Array[T], mk: MkArray[T], lo: Int, hi: Int): Unit = {
+    var i = lo
+    var j = hi - 1
+    while (i < j) {
+      val t = mk.get(a, i)
+      mk.set(a, i, mk.get(a, j))
+      mk.set(a, j, t)
       i += 1
       j -= 1
     }
@@ -638,6 +739,8 @@ object TimSort {
     *   the key whose insertion point to search for
     * @param a
     *   the array in which to search
+    * @param mk
+    *   the MkArray accessor for unboxed element access
     * @param base
     *   the index of the first element in the range
     * @param len
@@ -650,15 +753,15 @@ object TimSort {
     *   the int k, 0 <= k <= n such that a[b + k - 1] < key <= a[b + k], pretending that a[b - 1] is minus infinity and a[b + n] is infinity. In other words, key belongs at index b + k; or in other
     *   words, the first k elements of a should precede key, and the last n - k should follow it.
     */
-  private def gallopLeft[T](key: T, a: Array[T], base: Int, len: Int, hint: Int, c: Ordering[T]): Int = {
+  private def gallopLeft[T](key: T, a: Array[T], mk: MkArray[T], base: Int, len: Int, hint: Int, c: Ordering[T]): Int = {
     if (DEBUG) assert(len > 0 && hint >= 0 && hint < len)
 
     var lastOfs = 0
     var ofs     = 1
-    if (c.compare(key, a(base + hint)) > 0) {
+    if (c.compare(key, mk.get(a, base + hint)) > 0) {
       // Gallop right until a[base+hint+lastOfs] < key <= a[base+hint+ofs]
       val maxOfs = len - hint
-      while (ofs < maxOfs && c.compare(key, a(base + hint + ofs)) > 0) {
+      while (ofs < maxOfs && c.compare(key, mk.get(a, base + hint + ofs)) > 0) {
         lastOfs = ofs
         ofs = (ofs << 1) + 1
         if (ofs <= 0) ofs = maxOfs // int overflow
@@ -671,7 +774,7 @@ object TimSort {
     } else { // key <= a[base + hint]
       // Gallop left until a[base+hint-ofs] < key <= a[base+hint-lastOfs]
       val maxOfs = hint + 1
-      while (ofs < maxOfs && c.compare(key, a(base + hint - ofs)) <= 0) {
+      while (ofs < maxOfs && c.compare(key, mk.get(a, base + hint - ofs)) <= 0) {
         lastOfs = ofs
         ofs = (ofs << 1) + 1
         if (ofs <= 0) ofs = maxOfs // int overflow
@@ -690,7 +793,7 @@ object TimSort {
     while (lastOfs < ofs) {
       val m = lastOfs + ((ofs - lastOfs) >>> 1)
 
-      if (c.compare(key, a(base + m)) > 0) {
+      if (c.compare(key, mk.get(a, base + m)) > 0) {
         lastOfs = m + 1 // a[base + m] < key
       } else {
         ofs = m // key <= a[base + m]
@@ -706,6 +809,8 @@ object TimSort {
     *   the key whose insertion point to search for
     * @param a
     *   the array in which to search
+    * @param mk
+    *   the MkArray accessor for unboxed element access
     * @param base
     *   the index of the first element in the range
     * @param len
@@ -717,15 +822,15 @@ object TimSort {
     * @return
     *   the int k, 0 <= k <= n such that a[b + k - 1] <= key < a[b + k]
     */
-  private def gallopRight[T](key: T, a: Array[T], base: Int, len: Int, hint: Int, c: Ordering[T]): Int = {
+  private def gallopRight[T](key: T, a: Array[T], mk: MkArray[T], base: Int, len: Int, hint: Int, c: Ordering[T]): Int = {
     if (DEBUG) assert(len > 0 && hint >= 0 && hint < len)
 
     var ofs     = 1
     var lastOfs = 0
-    if (c.compare(key, a(base + hint)) < 0) {
+    if (c.compare(key, mk.get(a, base + hint)) < 0) {
       // Gallop left until a[base+hint-ofs] <= key < a[base+hint-lastOfs]
       val maxOfs = hint + 1
-      while (ofs < maxOfs && c.compare(key, a(base + hint - ofs)) < 0) {
+      while (ofs < maxOfs && c.compare(key, mk.get(a, base + hint - ofs)) < 0) {
         lastOfs = ofs
         ofs = (ofs << 1) + 1
         if (ofs <= 0) ofs = maxOfs // int overflow
@@ -739,7 +844,7 @@ object TimSort {
     } else { // a[base + hint] <= key
       // Gallop right until a[base+hint+lastOfs] <= key < a[base+hint+ofs]
       val maxOfs = len - hint
-      while (ofs < maxOfs && c.compare(key, a(base + hint + ofs)) >= 0) {
+      while (ofs < maxOfs && c.compare(key, mk.get(a, base + hint + ofs)) >= 0) {
         lastOfs = ofs
         ofs = (ofs << 1) + 1
         if (ofs <= 0) ofs = maxOfs // int overflow
@@ -757,7 +862,7 @@ object TimSort {
     while (lastOfs < ofs) {
       val m = lastOfs + ((ofs - lastOfs) >>> 1)
 
-      if (c.compare(key, a(base + m)) < 0) {
+      if (c.compare(key, mk.get(a, base + m)) < 0) {
         ofs = m // key < a[base + m]
       } else {
         lastOfs = m + 1 // a[base + m] <= key

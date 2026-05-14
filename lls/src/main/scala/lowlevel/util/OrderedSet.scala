@@ -24,7 +24,8 @@
 package lowlevel
 package util
 
-import scala.compiletime.summonFrom
+import scala.annotation.publicInBinary
+import scala.compiletime.summonInline
 
 /** An `ObjectSet` that also stores keys in a `DynamicArray` using the insertion order. Null keys are not allowed. No allocation is done except when growing the table size.
   *
@@ -34,9 +35,12 @@ import scala.compiletime.summonFrom
   *   Nathan Sweet, Tommy Ettinger (original implementation)
   */
 final class OrderedSet[A] private (
-  private val set:    ObjectSet[A],
-  private val _items: DynamicArray[A]
+  set0:   ObjectSet[A],
+  items0: DynamicArray[A]
 ) {
+
+  @publicInBinary private[util] val set:    ObjectSet[A]    = set0
+  @publicInBinary private[util] val _items: DynamicArray[A] = items0
 
   // --- Core ---
 
@@ -178,12 +182,10 @@ final class OrderedSet[A] private (
   // iterator-pool allocation complexity. All iteration functionality is preserved.
 
   /** Calls the given function for each element in insertion order. */
-  def foreach(f: A => Unit): Unit = {
-    var i = 0
-    while (i < _items.size) {
-      f(_items(i))
-      i += 1
-    }
+  inline def foreach(inline f: A => Unit): Unit = MkArray.withResolved[A, Unit](_items.mk) { [B, Mk <: MkArray[B]] => (mk0: Mk) =>
+    val items = mk0.castArray(_items._items)
+    var i     = 0
+    while (i < _items._size) { f(mk0.get(items, i).asInstanceOf[A]); i += 1 }
   }
 
   /** Returns a new DynamicArray containing all elements in insertion order. */
@@ -277,8 +279,6 @@ object OrderedSet {
     new OrderedSet[A](set, items)
   }
 
-  /** Resolves MkArray at compile time using summonFrom. */
-  private inline def summonMkArray[A]: MkArray[A] = summonFrom { case mk: MkArray[A] =>
-    mk
-  }
+  /** Resolves MkArray at compile time using summonInline. */
+  private inline def summonMkArray[A]: MkArray[A] = summonInline[MkArray[A]]
 }
