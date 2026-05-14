@@ -30,7 +30,6 @@ object Resource {
   def pure[A](a: A): Resource[A] = Eval.pure((a, Eval.void))
 
   extension [A](res: Resource[A]) {
-    def map[B](f: A => B):               Resource[B] = flatMap(a => Eval.pure(f(a._1) -> a._2))
     def flatMap[B](f: A => Resource[B]): Resource[B] =
       res.flatMap { case (aValue, aCleanup) =>
         try
@@ -44,11 +43,19 @@ object Resource {
         }
       }
 
+    def map[B](f: A => B): Resource[B] = flatMap(a => Eval.pure(f(a._1) -> a._2))
+
     def eval: Eval[(A, Eval[Unit])] = res
 
-    def run(): (A, () => Unit) = {
+    def allocate(): (A, () => Unit) = {
       val (value, f) = res.run
       (value, () => f.run)
+    }
+
+    def run(): A = {
+      val (value, cleanup) = allocate()
+      cleanup()
+      value
     }
   }
 }

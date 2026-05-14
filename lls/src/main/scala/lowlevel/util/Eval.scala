@@ -41,8 +41,8 @@ enum Eval[A] { fa =>
   final def void:        Eval[Unit] = as(())
 
   final def >>[B](fb: => Eval[B]): Eval[B] = flatMap(_ => fb)
-  final def *>[B](fb: => Eval[B]): Eval[A] = map2(fb)((a, _) => a)
-  final def <*[B](fb: => Eval[B]): Eval[B] = map2(fb)((_, b) => b)
+  final def <*[B](fb: => Eval[B]): Eval[A] = map2(fb)((a, _) => a)
+  final def *>[B](fb: => Eval[B]): Eval[B] = map2(fb)((_, b) => b)
 
   // --------------------------------------------------- Utilities ----------------------------------------------------
 

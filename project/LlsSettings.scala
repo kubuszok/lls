@@ -28,7 +28,8 @@ object LlsSettings {
   )
 
   val jvmSettings: Seq[Setting[?]] = Seq(
-    fork := true
+    fork := true,
+    Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "scalajvm"
   )
 
   val jsSettings: Seq[Setting[?]] = Seq.empty
