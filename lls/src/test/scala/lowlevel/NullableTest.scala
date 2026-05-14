@@ -35,32 +35,32 @@ class NullableTest extends munit.FunSuite {
   // --- map / flatMap / flatten ---
 
   test("map on non-empty") {
-    val n = Nullable("hello")
+    val n      = Nullable("hello")
     val mapped = n.map(_.length)
     assert(mapped.isDefined)
     assertEquals(mapped.get, 5)
   }
 
   test("map on empty") {
-    val n = Nullable.empty[String]
+    val n      = Nullable.empty[String]
     val mapped = n.map(_.length)
     assert(mapped.isEmpty)
   }
 
   test("flatMap on non-empty") {
-    val n = Nullable("hello")
+    val n      = Nullable("hello")
     val result = n.flatMap(s => Nullable(s.length))
     assertEquals(result.get, 5)
   }
 
   test("flatMap on non-empty to empty") {
-    val n = Nullable("hello")
+    val n      = Nullable("hello")
     val result = n.flatMap(_ => Nullable.empty[Int])
     assert(result.isEmpty)
   }
 
   test("flatMap on empty") {
-    val n = Nullable.empty[String]
+    val n      = Nullable.empty[String]
     val result = n.flatMap(s => Nullable(s.length))
     assert(result.isEmpty)
   }
@@ -71,8 +71,8 @@ class NullableTest extends munit.FunSuite {
   }
 
   test("flatten non-empty of empty") {
-    val inner: Nullable[String] = Nullable.empty[String]
-    val n: Nullable[Nullable[String]] = Nullable(inner)
+    val inner: Nullable[String]           = Nullable.empty[String]
+    val n:     Nullable[Nullable[String]] = Nullable(inner)
     assert(n.flatten.isEmpty)
   }
 
@@ -209,7 +209,7 @@ class NullableTest extends munit.FunSuite {
   // --- Nullable wrapping Nullable (NestedNone) ---
 
   test("Nullable of Nullable.empty is non-empty") {
-    val inner: Nullable[String] = Nullable.empty
+    val inner: Nullable[String]           = Nullable.empty
     val outer: Nullable[Nullable[String]] = Nullable(inner)
     assert(outer.isDefined)
     assert(outer.flatten.isEmpty)
@@ -221,8 +221,8 @@ class NullableTest extends munit.FunSuite {
   }
 
   test("double-nested empty Nullable flatten works") {
-    val inner: Nullable[Int] = Nullable.empty
-    val mid: Nullable[Nullable[Int]] = Nullable(inner)
+    val inner: Nullable[Int]           = Nullable.empty
+    val mid:   Nullable[Nullable[Int]] = Nullable(inner)
     assert(mid.isDefined)
     assert(mid.flatten.isEmpty)
 
@@ -247,10 +247,10 @@ class NullableTest extends munit.FunSuite {
   }
 
   test("wrapping Nullable.empty reuses cached NestedNone") {
-    val empty1: Nullable[String] = Nullable.empty
+    val empty1:   Nullable[String]           = Nullable.empty
     val wrapped1: Nullable[Nullable[String]] = Nullable(empty1)
 
-    val empty2: Nullable[Int] = Nullable.empty
+    val empty2:   Nullable[Int]           = Nullable.empty
     val wrapped2: Nullable[Nullable[Int]] = Nullable(empty2)
 
     assert(wrapped1.asInstanceOf[AnyRef] eq wrapped2.asInstanceOf[AnyRef])
