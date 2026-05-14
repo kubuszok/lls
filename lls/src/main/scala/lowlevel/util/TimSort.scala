@@ -24,7 +24,6 @@
 package lowlevel
 package util
 
-import java.util.Arrays
 import scala.language.implicitConversions
 import scala.util.boundary
 import scala.util.boundary.break
@@ -76,9 +75,6 @@ final class TimSort[T] {
   private var stackSize: Int        = 0 // Number of pending runs on stack
   private val runBase:   Array[Int] = new Array[Int](40)
   private val runLen:    Array[Int] = new Array[Int](40)
-
-  def doSort(a: Array[T], c: Ordering[T], lo: Int, hi: Int): Unit =
-    doSort(a, MkArray.anyRef[AnyRef](using scala.reflect.classTag[AnyRef]).asInstanceOf[MkArray[T]], c, lo, hi)
 
   def doSort(a: Array[T], mk: MkArray[T], c: Ordering[T], lo: Int, hi: Int): Unit = {
     stackSize = 0
@@ -533,30 +529,8 @@ object TimSort {
   /** Asserts have been placed in if-statements for performance. */
   private val DEBUG = false
 
-  def sort[T](a: Array[T], c: Ordering[T]): Unit =
-    sort(a, 0, a.length, c)
-
   def sort[T](a: Array[T], mk: MkArray[T], c: Ordering[T]): Unit =
     sort(a, mk, 0, a.length, c)
-
-  def sort[T](a: Array[T], lo: Int, hi: Int, c: Nullable[Ordering[T]]): Unit =
-    if (c.isEmpty) {
-      Arrays.sort(a.asInstanceOf[Array[AnyRef]], lo, hi)
-    } else {
-      val comp = c.getOrElse(throw new AssertionError("unreachable"))
-      rangeCheck(a.length, lo, hi)
-      val nRemaining = hi - lo
-      if (nRemaining < 2) () // Arrays of size 0 and 1 are always sorted
-      else if (nRemaining < MIN_MERGE) {
-        // If array is small, do a "mini-TimSort" with no merges
-        val initRunLen = countRunAndMakeAscending(a, lo, hi, comp)
-        binarySort(a, lo, hi, lo + initRunLen, comp)
-      } else {
-        // March over the array once, left to right, finding natural runs
-        val ts = TimSort[T]()
-        ts.doSort(a, comp, lo, hi)
-      }
-    }
 
   def sort[T](a: Array[T], mk: MkArray[T], lo: Int, hi: Int, c: Ordering[T]): Unit = {
     rangeCheck(a.length, lo, hi)
@@ -570,45 +544,6 @@ object TimSort {
       // March over the array once, left to right, finding natural runs
       val ts = TimSort[T]()
       ts.doSort(a, mk, c, lo, hi)
-    }
-  }
-
-  /** Sorts the specified portion of the specified array using a binary insertion sort. */
-  private def binarySort[T](a: Array[T], lo: Int, hi: Int, start: Int, c: Ordering[T]): Unit = {
-    if (DEBUG) assert(lo <= start && start <= hi)
-    var start_var = start
-    if (start_var == lo) start_var += 1
-
-    while (start_var < hi) {
-      val pivot = a(start_var)
-
-      // Set left (and right) to the index where a[start] (pivot) belongs
-      var left  = lo
-      var right = start_var
-      if (DEBUG) assert(left <= right)
-
-      while (left < right) {
-        val mid = (left + right) >>> 1
-        if (c.compare(pivot, a(mid)) < 0)
-          right = mid
-        else
-          left = mid + 1
-      }
-      if (DEBUG) assert(left == right)
-
-      val n = start_var - left // The number of elements to move
-      // Switch is just an optimization for arraycopy in default case
-      n match {
-        case 2 =>
-          a(left + 2) = a(left + 1)
-          a(left + 1) = a(left)
-        case 1 =>
-          a(left + 1) = a(left)
-        case _ =>
-          System.arraycopy(a, left, a, left + 1, n)
-      }
-      a(left) = pivot
-      start_var += 1
     }
   }
 
@@ -651,29 +586,6 @@ object TimSort {
     }
   }
 
-  /** Returns the length of the run beginning at the specified position in the specified array and reverses the run if it is descending (ensuring that the run will always be ascending when the method
-    * returns).
-    */
-  private def countRunAndMakeAscending[T](a: Array[T], lo: Int, hi: Int, c: Ordering[T]): Int = {
-    if (DEBUG) assert(lo < hi)
-    var runHi = lo + 1
-    if (runHi == hi) 1
-    else {
-      // Find end of run, and reverse range if descending
-      if (c.compare(a(runHi), a(lo)) < 0) { // Descending
-        runHi += 1
-        while (runHi < hi && c.compare(a(runHi), a(runHi - 1)) < 0)
-          runHi += 1
-        reverseRange(a, lo, runHi)
-      } else { // Ascending
-        while (runHi < hi && c.compare(a(runHi), a(runHi - 1)) >= 0)
-          runHi += 1
-      }
-
-      runHi - lo
-    }
-  }
-
   /** Returns the length of the run beginning at the specified position, with unboxed element access via MkArray. */
   private def countRunAndMakeAscending[T](a: Array[T], mk: MkArray[T], lo: Int, hi: Int, c: Ordering[T]): Int = {
     if (DEBUG) assert(lo < hi)
@@ -692,19 +604,6 @@ object TimSort {
       }
 
       runHi - lo
-    }
-  }
-
-  /** Reverse the specified range of the specified array. */
-  private def reverseRange[T](a: Array[T], lo: Int, hi: Int): Unit = {
-    var i = lo
-    var j = hi - 1
-    while (i < j) {
-      val t = a(i)
-      a(i) = a(j)
-      a(j) = t
-      i += 1
-      j -= 1
     }
   }
 

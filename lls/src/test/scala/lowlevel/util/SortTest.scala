@@ -49,14 +49,14 @@ class SortTest extends munit.FunSuite {
   test("sort array with comparator") {
     val array = Array(3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5)
     val ordering: Ordering[Int] = Ordering.Int
-    Sort.sort(array, MkArray.mkInt, ordering)
+    Sort.sort(array, MkArray.ofInt, ordering)
     assertEquals(array.toSeq, Seq(1, 1, 2, 3, 3, 4, 5, 5, 5, 6, 9))
   }
 
   test("sort array with comparator and range") {
     val array = Array(3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5)
     val ordering: Ordering[Int] = Ordering.Int
-    Sort.sort(array, MkArray.mkInt, ordering, 2, 7)
+    Sort.sort(array, MkArray.ofInt, ordering, 2, 7)
     assertEquals(array.toSeq, Seq(3, 1, 1, 2, 4, 5, 9, 6, 5, 3, 5))
   }
 
@@ -109,7 +109,7 @@ class SortTest extends munit.FunSuite {
       else if (o1 == null) -1
       else if (o2 == null) 1
       else o1.asInstanceOf[java.lang.Integer].compareTo(o2.asInstanceOf[java.lang.Integer])
-    Sort.sort(arrayWithNulls, nullsFirstOrdering)
+    Sort.sort(arrayWithNulls, MkArray.anyRef[AnyRef], nullsFirstOrdering)
     val expected: Array[AnyRef] =
       Array[AnyRef](null, null, Int.box(1), Int.box(2), Int.box(3), Int.box(4))
     assertEquals(arrayWithNulls.toSeq, expected.toSeq)
@@ -138,7 +138,7 @@ class SortTest extends munit.FunSuite {
     val array = DynamicArray[Int]()
     Seq(3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5).foreach(array.add)
     val reverseOrdering: Ordering[Int] = Ordering.Int.reverse
-    Sort.sort(array, reverseOrdering)
+    Sort.sort(array, MkArray.ofInt, reverseOrdering)
     assertEquals((0 until array.size).map(array(_)).toSeq, Seq(9, 6, 5, 5, 5, 4, 3, 3, 2, 1, 1))
   }
 
@@ -157,27 +157,27 @@ class SortTest extends munit.FunSuite {
   test("sort already sorted DynamicArray") {
     val sortedArray = DynamicArray[Int]()
     Seq(1, 2, 3, 4, 5).foreach(sortedArray.add)
-    Sort.sort(sortedArray, MkArray.mkInt, Ordering.Int)
+    Sort.sort(sortedArray, MkArray.ofInt, Ordering.Int)
     assertEquals((0 until sortedArray.size).map(sortedArray(_)).toSeq, Seq(1, 2, 3, 4, 5))
   }
 
   test("sort DynamicArray with equal elements") {
     val equalElementsArray = DynamicArray[Int]()
     Seq(2, 2, 2, 2, 2).foreach(equalElementsArray.add)
-    Sort.sort(equalElementsArray, MkArray.mkInt, Ordering.Int)
+    Sort.sort(equalElementsArray, MkArray.ofInt, Ordering.Int)
     assertEquals((0 until equalElementsArray.size).map(equalElementsArray(_)).toSeq, Seq(2, 2, 2, 2, 2))
   }
 
   test("sort single element DynamicArray") {
     val singleElementArray = DynamicArray[Int]()
     singleElementArray.add(1)
-    Sort.sort(singleElementArray, MkArray.mkInt, Ordering.Int)
+    Sort.sort(singleElementArray, MkArray.ofInt, Ordering.Int)
     assertEquals((0 until singleElementArray.size).map(singleElementArray(_)).toSeq, Seq(1))
   }
 
   test("sort empty DynamicArray") {
     val emptyArray = DynamicArray[Int]()
-    Sort.sort(emptyArray, MkArray.mkInt, Ordering.Int)
+    Sort.sort(emptyArray, MkArray.ofInt, Ordering.Int)
     assertEquals(emptyArray.size, 0)
   }
 
@@ -207,7 +207,7 @@ class SortTest extends munit.FunSuite {
     val rng   = java.util.Random(42)
     val n     = 500
     val array = Array.fill(n)(rng.nextInt(1000))
-    Sort.sort(array, MkArray.mkInt, Ordering.Int)
+    Sort.sort(array, MkArray.ofInt, Ordering.Int)
     for (i <- 1 until n)
       assert(array(i - 1) <= array(i), s"Out of order at $i: ${array(i - 1)} > ${array(i)}")
   }
@@ -261,7 +261,7 @@ class SortTest extends munit.FunSuite {
     val n   = 300
     val da  = DynamicArray[Int]()
     (0 until n).foreach(_ => da.add(rng.nextInt(1000)))
-    Sort.sort(da, MkArray.mkInt, Ordering.Int)
+    Sort.sort(da, MkArray.ofInt, Ordering.Int)
     for (i <- 1 until da.size)
       assert(da(i - 1) <= da(i), s"Out of order at $i: ${da(i - 1)} > ${da(i)}")
   }

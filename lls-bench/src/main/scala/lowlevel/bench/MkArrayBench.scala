@@ -26,19 +26,19 @@ class MkArrayBench {
   }
 
   @Benchmark
-  def createIntArray(): Array[Int] = MkArray.mkInt.create(size)
+  def createIntArray(): Array[Int] = MkArray.ofInt.create(size)
 
   @Benchmark
   def createStringArray(): Array[String] = MkArray.anyRef[String].create(size)
 
   @Benchmark
-  def copyOfInt(): Array[Int] = MkArray.mkInt.copyOf(intArray, size * 2)
+  def copyOfInt(): Array[Int] = MkArray.ofInt.copyOf(intArray, size * 2)
 
   @Benchmark
   def copyOfString(): Array[String] = MkArray.anyRef[String].copyOf(stringArray, size * 2)
 
   @Benchmark
-  def copyOfRangeInt(): Array[Int] = MkArray.mkInt.copyOfRange(intArray, size / 4, size * 3 / 4)
+  def copyOfRangeInt(): Array[Int] = MkArray.ofInt.copyOfRange(intArray, size / 4, size * 3 / 4)
 
   @Benchmark
   def copyOfRangeString(): Array[String] = MkArray.anyRef[String].copyOfRange(stringArray, size / 4, size * 3 / 4)

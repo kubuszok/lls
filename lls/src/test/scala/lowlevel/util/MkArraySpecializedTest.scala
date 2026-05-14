@@ -7,28 +7,28 @@ class MkArraySpecializedTest extends munit.FunSuite {
   object Pixels {
     def apply(v:  Int):              Pixels                 = v
     extension (p: Pixels) def toInt: Int                    = p
-    given mk:                        MkArray.OfInts[Pixels] = MkArray.mkInt.asInstanceOf[MkArray.OfInts[Pixels]]
+    given mk:                        MkArray.OfInts[Pixels] = MkArray.ofIntAs[Pixels]
   }
 
   opaque type Seconds = Float
   object Seconds {
     def apply(v:  Float):               Seconds                   = v
     extension (s: Seconds) def toFloat: Float                     = s
-    given mk:                           MkArray.OfFloats[Seconds] = MkArray.mkFloat.asInstanceOf[MkArray.OfFloats[Seconds]]
+    given mk:                           MkArray.OfFloats[Seconds] = MkArray.ofFloatAs[Seconds]
   }
 
   opaque type Millis = Long
   object Millis {
     def apply(v:  Long):              Millis                  = v
     extension (m: Millis) def toLong: Long                    = m
-    given mk:                         MkArray.OfLongs[Millis] = MkArray.mkLong.asInstanceOf[MkArray.OfLongs[Millis]]
+    given mk:                         MkArray.OfLongs[Millis] = MkArray.ofLongAs[Millis]
   }
 
   opaque type Flags = Byte
   object Flags {
     def apply(v:  Byte):             Flags                  = v
     extension (f: Flags) def toByte: Byte                   = f
-    given mk:                        MkArray.OfBytes[Flags] = MkArray.mkByte.asInstanceOf[MkArray.OfBytes[Flags]]
+    given mk:                        MkArray.OfBytes[Flags] = MkArray.ofByteAs[Flags]
   }
 
   test("DynamicArray[Pixels] stores and retrieves values correctly") {
