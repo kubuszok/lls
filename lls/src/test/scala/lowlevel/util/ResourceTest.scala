@@ -7,14 +7,14 @@ class ResourceTest extends munit.FunSuite {
 
   test("make creates and cleans up resource") {
     var cleaned = false
-    val value = Resource.make("hello") { _ => cleaned = true }.run()
+    val value   = Resource.make("hello") { _ => cleaned = true }.run()
     assertEquals(value, "hello")
     assert(cleaned)
   }
 
   test("make cleanup runs after use") {
     val log = scala.collection.mutable.ArrayBuffer[String]()
-    val res = Resource.make({ log += "create"; 42 })(v => log += s"cleanup-$v")
+    val res = Resource.make { log += "create"; 42 }(v => log += s"cleanup-$v")
     assert(log.isEmpty)
     val value = res.run()
     assertEquals(value, 42)
@@ -38,7 +38,7 @@ class ResourceTest extends munit.FunSuite {
 
   test("map preserves cleanup") {
     var cleaned = false
-    val res = Resource.make("hello")(_ => cleaned = true).map(_.length)
+    val res     = Resource.make("hello")(_ => cleaned = true).map(_.length)
     assertEquals(res.run(), 5)
     assert(cleaned)
   }
@@ -47,10 +47,9 @@ class ResourceTest extends munit.FunSuite {
 
   test("flatMap chains resources") {
     val log = scala.collection.mutable.ArrayBuffer[String]()
-    val res = Resource.make({ log += "create-a"; "hello" })(v => log += s"cleanup-a-$v")
-      .flatMap { a =>
-        Resource.make({ log += s"create-b-$a"; a.length })(v => log += s"cleanup-b-$v")
-      }
+    val res = Resource.make { log += "create-a"; "hello" }(v => log += s"cleanup-a-$v").flatMap { a =>
+      Resource.make { log += s"create-b-$a"; a.length }(v => log += s"cleanup-b-$v")
+    }
     val value = res.run()
     assertEquals(value, 5)
     assertEquals(log.toList, List("create-a", "create-b-hello", "cleanup-b-5", "cleanup-a-hello"))
@@ -59,9 +58,9 @@ class ResourceTest extends munit.FunSuite {
   test("flatMap cleans up in reverse order") {
     val log = scala.collection.mutable.ArrayBuffer[String]()
     val res = for {
-      a <- Resource.make({ log += "1"; "first" })(_ => log += "~1")
-      b <- Resource.make({ log += "2"; "second" })(_ => log += "~2")
-      c <- Resource.make({ log += "3"; "third" })(_ => log += "~3")
+      a <- Resource.make { log += "1"; "first" }(_ => log += "~1")
+      b <- Resource.make { log += "2"; "second" }(_ => log += "~2")
+      c <- Resource.make { log += "3"; "third" }(_ => log += "~3")
     } yield (a, b, c)
     val value = res.run()
     assertEquals(value, ("first", "second", "third"))
@@ -70,7 +69,7 @@ class ResourceTest extends munit.FunSuite {
 
   test("run cleans up resource after use") {
     var cleaned = false
-    val value = Resource.make(42)(_ => cleaned = true).run()
+    val value   = Resource.make(42)(_ => cleaned = true).run()
     assertEquals(value, 42)
     assert(cleaned)
   }
@@ -78,7 +77,7 @@ class ResourceTest extends munit.FunSuite {
   // --- allocate ---
 
   test("allocate returns value and cleanup function") {
-    var cleaned = false
+    var cleaned          = false
     val (value, cleanup) = Resource.make(42)(_ => cleaned = true).allocate()
     assertEquals(value, 42)
     assert(!cleaned)
@@ -89,7 +88,7 @@ class ResourceTest extends munit.FunSuite {
   // --- fromCloseable ---
 
   test("fromCloseable creates resource from Closeable") {
-    var closed = false
+    var closed    = false
     val closeable = new java.io.Closeable {
       def close(): Unit = closed = true
     }
@@ -101,8 +100,8 @@ class ResourceTest extends munit.FunSuite {
   // --- eval ---
 
   test("eval exposes underlying Eval") {
-    val res  = Resource.make(42)(_ => ())
-    val eval = res.eval
+    val res              = Resource.make(42)(_ => ())
+    val eval             = res.eval
     val (value, cleanup) = eval.run
     assertEquals(value, 42)
     cleanup.run
@@ -111,7 +110,7 @@ class ResourceTest extends munit.FunSuite {
   // --- Edge cases ---
 
   test("pure resource cleanup is safe no-op") {
-    val res = Resource.pure("hello")
+    val res              = Resource.pure("hello")
     val (value, cleanup) = res.allocate()
     assertEquals(value, "hello")
     cleanup()
@@ -120,10 +119,7 @@ class ResourceTest extends munit.FunSuite {
 
   test("nested map and flatMap") {
     var cleaned = false
-    val res = Resource.make(10)(_ => cleaned = true)
-      .map(_ * 2)
-      .map(_ + 1)
-      .flatMap(v => Resource.pure(v.toString))
+    val res     = Resource.make(10)(_ => cleaned = true).map(_ * 2).map(_ + 1).flatMap(v => Resource.pure(v.toString))
     assertEquals(res.run(), "21")
     assert(cleaned)
   }

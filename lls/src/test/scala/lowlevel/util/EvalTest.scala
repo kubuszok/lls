@@ -11,7 +11,7 @@ class EvalTest extends munit.FunSuite {
 
   test("apply defers evaluation") {
     var evaluated = false
-    val e = Eval { evaluated = true; 42 }
+    val e         = Eval { evaluated = true; 42 }
     assert(!evaluated)
     assertEquals(e.run, 42)
     assert(evaluated)
@@ -19,7 +19,7 @@ class EvalTest extends munit.FunSuite {
 
   test("defer defers thunk") {
     var evaluated = false
-    val e = Eval.defer { evaluated = true; Eval.pure(42) }
+    val e         = Eval.defer { evaluated = true; Eval.pure(42) }
     assert(!evaluated)
     assertEquals(e.run, 42)
     assert(evaluated)
@@ -41,7 +41,7 @@ class EvalTest extends munit.FunSuite {
 
   test("map defers computation") {
     var count = 0
-    val e = Eval.pure(1).map { v => count += 1; v + 1 }
+    val e     = Eval.pure(1).map { v => count += 1; v + 1 }
     assertEquals(count, 0)
     assertEquals(e.run, 2)
     assertEquals(count, 1)
@@ -56,7 +56,7 @@ class EvalTest extends munit.FunSuite {
 
   test("flatMap defers") {
     var count = 0
-    val e = Eval.pure(1).flatMap { v => count += 1; Eval.pure(v + 1) }
+    val e     = Eval.pure(1).flatMap { v => count += 1; Eval.pure(v + 1) }
     assertEquals(count, 0)
     assertEquals(e.run, 2)
     assertEquals(count, 1)
@@ -81,7 +81,7 @@ class EvalTest extends munit.FunSuite {
 
   test("flatTap runs side effect and returns original value") {
     var sideEffect = 0
-    val result = Eval.pure(42).flatTap(v => Eval { sideEffect = v; () }).run
+    val result     = Eval.pure(42).flatTap(v => Eval { sideEffect = v; () }).run
     assertEquals(result, 42)
     assertEquals(sideEffect, 42)
   }
@@ -90,7 +90,7 @@ class EvalTest extends munit.FunSuite {
 
   test("mapTap runs function and returns original value") {
     var sideEffect = 0
-    val result = Eval.pure(42).mapTap(v => sideEffect = v).run
+    val result     = Eval.pure(42).mapTap(v => sideEffect = v).run
     assertEquals(result, 42)
     assertEquals(sideEffect, 42)
   }
@@ -119,7 +119,7 @@ class EvalTest extends munit.FunSuite {
   // --- >> / <* / *> ---
 
   test(">> sequences and keeps second") {
-    var first = false
+    var first  = false
     val result = Eval { first = true; 1 } >> Eval.pure(2)
     assertEquals(result.run, 2)
     assert(first)
@@ -137,7 +137,7 @@ class EvalTest extends munit.FunSuite {
 
   test("side effects execute in order") {
     val log = scala.collection.mutable.ArrayBuffer[String]()
-    val e = for {
+    val e   = for {
       _ <- Eval { log += "first"; () }
       _ <- Eval { log += "second"; () }
       _ <- Eval { log += "third"; () }
@@ -149,7 +149,7 @@ class EvalTest extends munit.FunSuite {
 
   test("Eval.apply re-evaluates each run") {
     var count = 0
-    val e = Eval { count += 1; count }
+    val e     = Eval { count += 1; count }
     assertEquals(e.run, 1)
     assertEquals(e.run, 2)
     assertEquals(e.run, 3)
