@@ -43,6 +43,8 @@ object Nullable {
   }
   def empty[A]: Nullable[A] = NestedNone(0)
 
+  def Null[A]: Nullable[A] = empty[A]
+
   def fromOption[A](option: Option[A]): Nullable[A] = option.fold(empty[A])(apply)
 
   extension [A](maybe: Nullable[A]) {
@@ -118,6 +120,11 @@ object Nullable {
     def filter(p: A => Boolean): Nullable[A] = maybe match {
       case `None` => None
       case a: A => if (p(a)) maybe else None
+    }
+
+    def toOption: Option[A] = maybe match {
+      case `None` => scala.None
+      case a: A => Some(a)
     }
   }
   extension [A](maybe: Nullable[Nullable[A]]) {

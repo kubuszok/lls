@@ -5,14 +5,14 @@ class MkArrayResolutionTest extends munit.FunSuite {
 
   opaque type Pixels = Int
   object Pixels {
-    def apply(v: Int): Pixels = v
-    extension (p: Pixels) def toInt: Int = p
+    def apply(v:  Int):              Pixels = v
+    extension (p: Pixels) def toInt: Int    = p
     given MkArray.OfInts[Pixels] = MkArray.ofIntAs[Pixels]
   }
 
   test("summonInline finds OfInts[Pixels] as MkArray[Pixels]") {
     // This is what collection factories do internally
-    val mk = scala.compiletime.summonInline[MkArray[Pixels]]
+    val mk  = scala.compiletime.summonInline[MkArray[Pixels]]
     val arr = mk.create(3)
     mk.set(arr, 0, Pixels(42))
     assertEquals(mk.get(arr, 0).toInt, 42)

@@ -16,3 +16,5 @@ addSbtPlugin("com.typesafe"    % "sbt-mima-plugin"   % "1.1.5")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh"        % "0.4.8")
 // IDE
 addSbtPlugin("org.jetbrains"      % "sbt-ide-settings" % "1.1.0")
+// welcome
+addSbtPlugin("com.github.reibitto" % "sbt-welcome"     % "0.5.0")
