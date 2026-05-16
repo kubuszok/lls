@@ -24,115 +24,91 @@ type Nullable[A] = Nullable.Impl[A]
 object Nullable {
   opaque type Impl[A] = A | Nullable.NestedNone
 
-  /** TypeTest so that pattern matching `case a: A` inside Nullable's union type works correctly on Scala Native. Without this, Scala Native generates a `Product with Serializable` cast check for the
-    * `NestedNone` branch, which fails when `A` is `Class[?]` or other types that aren't `Serializable`.
-    *
-    * The test is simple: a value is `A` if it's not `NestedNone`.
-    */
-  private given nullableTypeTest[A]: scala.reflect.TypeTest[A | NestedNone, A] =
-    (x: A | NestedNone) =>
-      x match {
-        case _: NestedNone => scala.None
-        case _ => Some(x.asInstanceOf[x.type & A])
-      }
+  def apply[A](a: A): Nullable[A] =
+    if (a == null) None
+    else if (a.isInstanceOf[NestedNone]) NestedNone(a.asInstanceOf[NestedNone].value + 1)
+    else a
 
-  def apply[A](a: A): Nullable[A] = a match {
-    case _ if a == null => None
-    case NestedNone(n)  => NestedNone(n + 1)
-    case a              => a
-  }
   def empty[A]: Nullable[A] = NestedNone(0)
 
   def Null[A]: Nullable[A] = empty[A]
 
   def fromOption[A](option: Option[A]): Nullable[A] = option.fold(empty[A])(apply)
 
+  // Use eq against the None sentinel — NOT isInstanceOf[NestedNone], because higher
+  // nesting levels (NestedNone(1), NestedNone(2), ...) represent "defined at this level,
+  // empty at deeper level" and must NOT be treated as empty at the current level.
+  private def isNone(v: Any): Boolean = v.asInstanceOf[AnyRef] eq None
+
   extension [A](maybe: Nullable[A]) {
 
-    def map[B](f: A => B): Nullable[B] = maybe match {
-      case `None` => None
-      case a: A => apply(f(a))
-    }
+    def map[B](f: A => B): Nullable[B] =
+      if (isNone(maybe)) None
+      else apply(f(maybe.asInstanceOf[A]))
 
     def flatMap[B](f: A => Nullable[B]): Nullable[B] = map(f).flatten
 
-    def foreach(f: A => Unit): Unit = maybe match {
-      case `None` => ()
-      case a: A => f(a)
-    }
+    def foreach(f: A => Unit): Unit =
+      if (!isNone(maybe)) f(maybe.asInstanceOf[A])
 
-    def fold[B](onEmpty: => B)(onSome: A => B): B = maybe match {
-      case `None` => onEmpty
-      case a: A => onSome(a)
-    }
+    def fold[B](onEmpty: => B)(onSome: A => B): B =
+      if (isNone(maybe)) onEmpty
+      else onSome(maybe.asInstanceOf[A])
 
-    def getOrElse(onEmpty: => A): A = maybe match {
-      case `None` => onEmpty
-      case a: A => a
-    }
+    def getOrElse(onEmpty: => A): A =
+      if (isNone(maybe)) onEmpty
+      else maybe.asInstanceOf[A]
 
     /** Force-unwraps the value, throwing NullPointerException if empty. Named `get` to avoid shadowing Scala 3's built-in `.nn` extension on `T | Null`.
       */
-    def get: A = maybe match {
-      case `None` => throw new NullPointerException("Nullable.get called on empty value")
-      case a: A => a
-    }
+    def get: A =
+      if (isNone(maybe)) throw new NullPointerException("Nullable.get called on empty value")
+      else maybe.asInstanceOf[A]
 
     /** Unwraps to the raw value or null. NOT actually deprecated — the annotation is used to trigger -Werror with -deprecation, forcing callers to add @nowarn("msg=deprecated") with an explicit
       * comment explaining why orNull is needed (e.g., passing to a Java API that expects null). For all other cases, use fold, foreach, getOrElse, map, isDefined, or isEmpty instead.
       */
     @deprecated("orNull should only be used at Java interop boundaries; use fold/foreach/getOrElse instead", "always")
-    def orNull: A = maybe match {
-      case `None` => null.asInstanceOf[A]
-      case a: A => a
-    }
+    def orNull: A =
+      if (isNone(maybe)) null.asInstanceOf[A]
+      else maybe.asInstanceOf[A]
 
-    def isDefined: Boolean = maybe match {
-      case `None` => false
-      case _      => true
-    }
+    def isDefined: Boolean = !isNone(maybe)
 
-    def isEmpty: Boolean = maybe match {
-      case `None` => true
-      case _      => false
-    }
+    def isEmpty: Boolean = isNone(maybe)
 
-    def orElse(alternative: => Nullable[A]): Nullable[A] = maybe match {
-      case `None` => alternative
-      case _      => maybe
-    }
+    def orElse(alternative: => Nullable[A]): Nullable[A] =
+      if (isNone(maybe)) alternative
+      else maybe
 
-    def exists(p: A => Boolean): Boolean = maybe match {
-      case `None` => false
-      case a: A => p(a)
-    }
+    def exists(p: A => Boolean): Boolean =
+      if (isNone(maybe)) false
+      else p(maybe.asInstanceOf[A])
 
-    def forall(p: A => Boolean): Boolean = maybe match {
-      case `None` => true
-      case a: A => p(a)
-    }
+    def forall(p: A => Boolean): Boolean =
+      if (isNone(maybe)) true
+      else p(maybe.asInstanceOf[A])
 
-    def contains[A1 >: A](elem: A1): Boolean = maybe match {
-      case `None` => false
-      case a: A => a == elem
-    }
+    def contains[A1 >: A](elem: A1): Boolean =
+      if (isNone(maybe)) false
+      else maybe.asInstanceOf[A] == elem
 
-    def filter(p: A => Boolean): Nullable[A] = maybe match {
-      case `None` => None
-      case a: A => if (p(a)) maybe else None
-    }
+    def filter(p: A => Boolean): Nullable[A] =
+      if (isNone(maybe)) None
+      else if (p(maybe.asInstanceOf[A])) maybe
+      else None
 
-    def toOption: Option[A] = maybe match {
-      case `None` => scala.None
-      case a: A => Some(a)
-    }
+    def toOption: Option[A] =
+      if (isNone(maybe)) scala.None
+      else Some(maybe.asInstanceOf[A])
   }
   extension [A](maybe: Nullable[Nullable[A]]) {
 
-    def flatten: Nullable[A] = maybe match {
-      case `None`           => None
-      case _ @NestedNone(n) => NestedNone(n - 1)
-      case a: A => a
+    def flatten: Nullable[A] = {
+      val m = maybe.asInstanceOf[AnyRef]
+      if (m eq None) None
+      else if (m.isInstanceOf[NestedNone]) NestedNone(m.asInstanceOf[NestedNone].value - 1)
+      else maybe.asInstanceOf[A]
     }
   }
 
@@ -153,17 +129,30 @@ object Nullable {
     */
   private val None = NestedNone(0)
 
-  /** Nested `None`, that traces the amount of nesting. Cached to avoid allocation.
+  /** Nested `None`, that traces the amount of nesting. Cached to avoid allocation. NOT a case class — case class extends Product with Serializable, which causes ClassCastException on Scala Native
+    * when the opaque union type `A | NestedNone` is erased (Native's Pattern class lacks Serializable).
     */
-  private case class NestedNone private (value: Int) {
+  final private class NestedNone(val value: Int) {
 
     assert(value >= 0, "None nesting level cannot be negative, got: " + value)
+
+    override def equals(other: Any): Boolean = other match {
+      case nn: NestedNone => nn.value == value
+      case _ => false
+    }
+    override def hashCode(): Int    = value
+    override def toString:   String = s"NestedNone($value)"
   }
   private object NestedNone {
 
     def apply(value: Int): NestedNone =
       if (value >= 0 && value < cache.length) cache(value)
       else new NestedNone(value)
+
+    def unapply(a: Any): Option[Int] = a match {
+      case nn: NestedNone => Some(nn.value)
+      case _ => scala.None
+    }
 
     private val cache = IArray.from((0 until 10).map(new NestedNone(_)))
   }

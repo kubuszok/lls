@@ -1,21 +1,8 @@
-// Format on compile during local development, skip on CI.
-lazy val isCI = sys.env.get("CI").contains("true")
+import kubuszok.sbt._
+import kubuszok.sbt.KubuszokPlugin.autoImport._
+import sbtwelcome.UsefulTask
+
 ThisBuild / packageDoc / publishArtifact := false
-ThisBuild / scalafmtOnCompile := !isCI
-
-// Version from git tags: tagged commits get clean versions (e.g. "0.1.0"),
-// untagged commits get SNAPSHOT versions (e.g. "0.1.0-SNAPSHOT").
-git.useGitDescribe       := true
-git.uncommittedSignifier := Some("SNAPSHOT")
-// Sonatype ignores isSnapshot setting and only looks at -SNAPSHOT suffix in version:
-//   https://central.sonatype.org/publish/publish-maven/#performing-a-snapshot-deployment
-// meanwhile sbt-git used to set up SNAPSHOT if there were uncommitted changes:
-//   https://github.com/sbt/sbt-git/issues/164
-// (now this suffix is empty by default) so we need to fix it manually.
-git.gitUncommittedChanges := git.gitCurrentTags.value.isEmpty
-
-// Used to publish snapshots to Maven Central.
-val mavenCentralSnapshots = "Maven Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots"
 
 val publishSettings = Seq(
   organization := "com.kubuszok",
@@ -38,20 +25,11 @@ val publishSettings = Seq(
       <url>https://github.com/kubuszok/lls/issues</url>
     </issueManagement>
   ),
-  publishTo := {
-    if (isSnapshot.value) Some(mavenCentralSnapshots)
-    else localStaging.value
-  },
-  publishMavenStyle := true,
-  Test / publishArtifact := false,
-  pomIncludeRepository := { _ =>
-    false
-  },
-  versionScheme := Some("early-semver")
+  projectType := ProjectType.ScalaLibrary
 )
 
 val noPublishSettings =
-  Seq(publish / skip := true, publishArtifact := false)
+  Seq(projectType := ProjectType.NonPublished)
 
 // --- MiMa settings ---
 
@@ -62,11 +40,8 @@ val mimaSettings = Seq(
 
 // --- Modules ---
 
-import sbtwelcome.UsefulTask
-
 lazy val root = project
   .in(file("."))
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .settings(LlsSettings.commonSettings *)
   .settings(publishSettings *)
   .settings(noPublishSettings *)
@@ -99,7 +74,6 @@ lazy val root = project
 
 lazy val lls = (projectMatrix in file("lls"))
   .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(LlsSettings.scalaVersion))
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(LlsSettings.commonSettings *)
   .settings(publishSettings *)
@@ -138,4 +112,3 @@ lazy val `lls-bench` = (projectMatrix in file("lls-bench"))
 addCommandAlias("test-coverage", "; coverage; lls/test; coverageAggregate; coverageOff")
 addCommandAlias("test-js", "llsJS/test")
 addCommandAlias("test-native", "llsNative/test")
-addCommandAlias("ci-release", "publishSigned")
