@@ -1,12 +1,21 @@
-name: Release
+name: Sonatype Release
 
 on:
   push:
     branches: [master]
-    tags: ['*']
+    tags: ["*"]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JVM_VERSION: "zulu:25"
 
 jobs:
-  release:
+  build-and-publish:
     runs-on: ubuntu-latest
 
     name: ${{ startsWith(github.ref, 'refs/tags/') && 'Publish Tag as Release' || 'Publish Snapshot' }}
@@ -15,21 +24,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: sbt
-
-      - uses: sbt/setup-sbt@v1
-
+      - uses: coursier/cache-action@v8
       - name: Import GPG key for signing the release
         uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
-
+      - uses: coursier/setup-action@v3.0.0
+        with:
+          jvm: ${{ env.JVM_VERSION }}
+          apps: sbt
       - name: Publish all projects
         run: sbt ci-release
         env:
