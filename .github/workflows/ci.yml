@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  JVM_VERSION: "zulu:25"
   JAVA_VERSION: "25"
   JAVA_DISTRIBUTION: "zulu"
 
@@ -26,13 +27,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      - uses: coursier/setup-action@v3.0.0
         with:
-          distribution: ${{ env.JAVA_DISTRIBUTION }}
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: sbt
-
-      - uses: sbt/setup-sbt@v1
+          jvm: ${{ env.JVM_VERSION }}
+          apps: sbt
 
       - name: Check formatting
         run: sbt "scalafmtCheckAll; scalafmtSbtCheck"
@@ -74,7 +72,7 @@ jobs:
       - uses: sbt/setup-sbt@v1
 
       - name: Run JVM tests with coverage
-        run: sbt test-coverage
+        run: sbt ci-jvm-3
 
       - name: Upload coverage to Codecov
         if: always()
@@ -96,16 +94,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      - uses: coursier/setup-action@v3.0.0
         with:
-          distribution: ${{ env.JAVA_DISTRIBUTION }}
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: sbt
-
-      - uses: sbt/setup-sbt@v1
+          jvm: ${{ env.JVM_VERSION }}
+          apps: sbt
 
       - name: Run Scala.js tests
-        run: sbt test-js
+        run: sbt test-js-3
 
   # ─── Scala Native tests (5 desktop platforms) ──────────────────────
 
@@ -152,4 +147,4 @@ jobs:
         run: choco install llvm --yes
 
       - name: Run Scala Native tests
-        run: sbt test-native
+        run: sbt test-native-3
