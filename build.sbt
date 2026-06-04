@@ -13,7 +13,7 @@ val versions = new {
 
   // Dependencies (test)
   val munit           = "1.3.2"
-  val munitScalacheck = "1.0.0"
+  val munitScalacheck = "1.3.0"
   val scalacheck      = "1.19.0"
 }
 
