@@ -6,7 +6,7 @@ import kubuszok.sbt.KubuszokPlugin.autoImport._
 // Versions
 
 val versions = new {
-  val scala3 = "3.8.3"
+  val scala3 = "3.8.4"
 
   val scalas    = List(scala3)
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
