@@ -12,7 +12,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies (test)
-  val munit           = "1.3.2"
+  val munit           = "1.3.3"
   val munitScalacheck = "1.3.0"
   val scalacheck      = "1.19.0"
 }
