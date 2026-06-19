@@ -374,7 +374,14 @@ object MkArray {
       case mk: OfFloats[A]   => body[A & Float, OfFloats[A]](mk)
       case mk: OfDoubles[A]  => body[A & Double, OfDoubles[A]](mk)
       case mk: OfBooleans[A] => body[A & Boolean, OfBooleans[A]](mk)
-      case mk: OfRefs[A]     => body[A, MkArray[A]](mk)
-      case _ => body[A, MkArray[A]](fallback)
+      // For ref/abstract-ref arrays the backing store may be an `Object[]`
+      // (e.g. built via `MkArray.anyRef[AnyRef]` / `wrapRefUnchecked`). Witnessing
+      // `B = A` would inline a whole-array reified cast (`Object[]` -> `Bound[]`)
+      // at the call site, which the JVM rejects with a ClassCastException when
+      // `A`'s erasure (its upper bound) is not `AnyRef`. Witnessing `B = AnyRef`
+      // types the inlined `items` as `Array[AnyRef]` — no whole-array cast — and
+      // the body's per-element `.asInstanceOf[A]` still narrows correctly.
+      case mk: OfRefs[?] => body[AnyRef, OfRefs[AnyRef]](mk.asInstanceOf[OfRefs[AnyRef]])
+      case _ => body[AnyRef, MkArray[AnyRef]](fallback.asInstanceOf[MkArray[AnyRef]])
     }
 }
