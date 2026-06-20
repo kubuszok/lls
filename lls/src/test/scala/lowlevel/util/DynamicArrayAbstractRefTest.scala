@@ -3,19 +3,12 @@ package util
 
 import scala.reflect.ClassTag
 
-/** Regression test for ISS-686: `DynamicArray.foreach` (and the sibling inline
-  * methods `exists`/`find`/`count`/`forall`/`indexWhere`) threw
-  * `ClassCastException: [Ljava.lang.Object; cannot be cast to [L<Bound>;`
-  * when the backing array was an `Object[]` (built via `MkArray.anyRef[AnyRef]`,
-  * e.g. through `DynamicArray.wrapRefUnchecked`) AND the element type `T` was an
-  * abstract ref type whose upper bound was NOT `AnyRef` (e.g. `T <: Base`).
+/** Regression test for ISS-686: `DynamicArray.foreach` (and the sibling inline methods `exists`/`find`/`count`/`forall`/`indexWhere`) threw
+  * `ClassCastException: [Ljava.lang.Object; cannot be cast to [L<Bound>;` when the backing array was an `Object[]` (built via `MkArray.anyRef[AnyRef]`, e.g. through `DynamicArray.wrapRefUnchecked`)
+  * AND the element type `T` was an abstract ref type whose upper bound was NOT `AnyRef` (e.g. `T <: Base`).
   *
-  * The inline body's `mk0.castArray(_items)` (with witness `B = A`) inlined a
-  * whole-array reified CHECKCAST of the `Object[]` backing to `Bound[]` at the
-  * call site, which the JVM rejects. The fix witnesses `B = AnyRef` in the
-  * `OfRefs`/fallback branches of `MkArray.withResolved`, so the array is typed
-  * `Array[AnyRef]` (no whole-array cast) and only per-element `.asInstanceOf[A]`
-  * narrows.
+  * The inline body's `mk0.castArray(_items)` (with witness `B = A`) inlined a whole-array reified CHECKCAST of the `Object[]` backing to `Bound[]` at the call site, which the JVM rejects. The fix
+  * witnesses `B = AnyRef` in the `OfRefs`/fallback branches of `MkArray.withResolved`, so the array is typed `Array[AnyRef]` (no whole-array cast) and only per-element `.asInstanceOf[A]` narrows.
   */
 class DynamicArrayAbstractRefTest extends munit.FunSuite {
 
@@ -53,7 +46,7 @@ class DynamicArrayAbstractRefTest extends munit.FunSuite {
 
   test("find over Object[]-backed DynamicArray with abstract-bound element type") {
     def go[T <: Base](da: DynamicArray[T]): Nullable[T] = da.find(_.value == 2)
-    val da    = buildObjectBacked[Leaf](new Leaf(1), new Leaf(2), new Leaf(3))
+    val da = buildObjectBacked[Leaf](new Leaf(1), new Leaf(2), new Leaf(3))
     val found = go(da)
     assert(found.isDefined)
     assertEquals(found.get.value, 2)
