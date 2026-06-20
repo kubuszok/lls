@@ -1,32 +1,65 @@
-import sbtwelcome.UsefulTask
 import commandmatrix.extra.*
 import kubuszok.sbt._
 import kubuszok.sbt.KubuszokPlugin.autoImport._
 
 // Versions
 
-val versions = new {
-  val scala3 = "3.8.4"
+// sbt 2.0's build dialect drops the structural-type refinement on `new { ... }`, so `versions.scala3`
+// fails to resolve, and top-level objects aren't visible to lifted setting expressions either.
+// Use plain top-level vals (the proven sbt-2.0 pattern).
+val scala3 = "3.8.4"
 
-  val scalas    = List(scala3)
-  val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
+val scalas    = List(scala3)
+val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
-  // Dependencies (test)
-  val munit           = "1.3.3"
-  val munitScalacheck = "1.3.0"
-  val scalacheck      = "1.19.0"
-}
+// Dependencies (test)
+// munit 1.3.3+: avoids the scala-native test-interface eviction with scala-native 0.5.12 on sbt 2.0.
+val munitVersion           = "1.3.3"
+val munitScalacheckVersion = "1.3.0"
+val scalacheckVersion      = "1.19.0"
 
 val dev = new DevProperties(
   scala213 = None,
-  scala3 = Some(versions.scala3),
-  platforms = versions.platforms
+  scala3 = Some(scala3),
+  platforms = platforms
 )
 
 lazy val al = new Aliases(
   published = Seq(lls),
   compileOnly = Seq(`lls-bench`)
 )
+
+// CI/test command aliases (e.g. ci-jvm-3, test-js-3, test-native-3), consumed by .github/workflows/ci.yml.
+// sbt-welcome used to register these via `usefulTasks`, but it has no sbt 2.0 build, so we register
+// them directly from the Aliases helper bundled with sbt-kubuszok.
+def aliasName(prefix: String, platform: String, scalaBinary: String): String =
+  s"$prefix-${platform.toLowerCase}-${scalaBinary.replace('.', '_')}"
+
+// In sbt 2.0 the `test` task is incremental and machine-wide cached (it behaves like sbt 1.x's
+// `testQuick`), so a CI run that begins with `clean` can still report "No tests to run" and pass
+// vacuously. `testFull` is the uncached full run. Rewrite the generated `<id>/test` steps to
+// `<id>/testFull` so CI always executes the whole suite.
+def fullTests(command: String): String =
+  command
+    .split(";")
+    .map { step =>
+      val trimmed = step.trim
+      if (trimmed.endsWith("/test")) trimmed.stripSuffix("/test") + "/testFull" else trimmed
+    }
+    .mkString(" ; ")
+
+lazy val ciAliases: Seq[Def.Setting[?]] = {
+  val platformNames = List("JVM", "JS", "Native")
+  val scalaBinaries = List("3")
+  val perCombination = for {
+    platform    <- platformNames
+    scalaBinary <- scalaBinaries
+    setting <-
+      addCommandAlias(aliasName("ci", platform, scalaBinary), fullTests(al.ci(platform, scalaBinary))) ++
+        addCommandAlias(aliasName("test", platform, scalaBinary), fullTests(al.test(platform, scalaBinary)))
+  } yield setting
+  perCombination ++ addCommandAlias("ci-release", al.release)
+}
 
 val commonSettings = Seq(
   MatrixAction.ForAll.Configure(_.settings(
@@ -46,6 +79,13 @@ val commonSettings = Seq(
   MatrixAction.ForPlatforms(VirtualAxis.jvm).Configure(_.settings(
     fork := true,
     Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "scalajvm"
+  )),
+  // Scala Native 0.5.12: munit 1.3.3 pulls test-interface 0.5.12 while scalacheck 1.19.0 still pulls
+  // 0.5.8. Coursier already selects 0.5.12 (the newer toolchain version), but the Scala Native
+  // plugin marks test-interface with a "strict" scheme, so the older request is reported as a
+  // binary-incompat eviction error on sbt 2.0. Demote that eviction to a warning for native.
+  MatrixAction.ForPlatforms(VirtualAxis.native).Configure(_.settings(
+    evictionErrorLevel := sbt.util.Level.Warn
   ))
 )
 
@@ -84,24 +124,25 @@ val mimaSettings = Seq(
 // --- Modules ---
 
 lazy val lls = (projectMatrix in file("lls"))
-  .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(versions.scala3))
-  .someVariations(versions.scalas, versions.platforms)((commonSettings ++ dev.only1VersionInIDE) *)
+  .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
+  .someVariations(scalas, platforms)((commonSettings ++ dev.only1VersionInIDE) *)
   .settings(
     name := "lls",
     description := "Low Level Scala — cross-platform, allocation-conscious utilities",
     libraryDependencies ++= Seq(
-      "org.scalameta"  %%% "munit"            % versions.munit           % Test,
-      "org.scalameta"  %%% "munit-scalacheck" % versions.munitScalacheck % Test,
-      "org.scalacheck" %%% "scalacheck"       % versions.scalacheck      % Test
+      // sbt 2.0: %% is platform-aware (encodes Scala version + JS/Native suffix); %%% is gone.
+      "org.scalameta"  %% "munit"            % munitVersion           % Test,
+      "org.scalameta"  %% "munit-scalacheck" % munitScalacheckVersion % Test,
+      "org.scalacheck" %% "scalacheck"       % scalacheckVersion      % Test
     )
   )
   .settings(publishSettings)
   .settings(mimaSettings)
 
 lazy val `lls-bench` = (projectMatrix in file("lls-bench"))
-  .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(versions.scala3))
+  .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
   .enablePlugins(JmhPlugin)
-  .someVariations(versions.scalas, List(VirtualAxis.jvm))((commonSettings ++ dev.only1VersionInIDE) *)
+  .someVariations(scalas, List(VirtualAxis.jvm))((commonSettings ++ dev.only1VersionInIDE) *)
   .settings(
     name := "lls-bench",
     description := "JMH benchmarks for Low Level Scala",
@@ -119,23 +160,8 @@ lazy val root = (project in file("."))
   .aggregate(`lls-bench`.projectRefs *)
   .settings(
     name := "lls-build",
-    description := "Build setup for Low Level Scala",
-    logo :=
-      s"""Low Level Scala (lls) ${version.value} for Scala ${versions.scala3} x (Scala JVM, Scala.js $scalaJSVersion, Scala Native $nativeVersion)
-         |
-         |Cross-platform, allocation-conscious utilities: Nullable, MkArray, ArrayView,
-         |DynamicArray, ObjectMap, ObjectSet, OrderedMap, OrderedSet, Sort, MathUtils.
-         |
-         |This build uses sbt-projectmatrix:
-         | - Scala JVM adds no suffix to a project name seen in build.sbt
-         | - Scala.js adds the "JS" suffix to a project name seen in build.sbt
-         | - Scala Native adds the "Native" suffix to a project name seen in build.sbt
-         |
-         |When working with IntelliJ or Scala Metals, edit dev.properties to control which platform you're currently working with.
-         |""".stripMargin,
-    usefulTasks := al.usefulTasks(extra = Seq(
-      UsefulTask("scalafmtAll", "Format all sources").noAlias
-    ))
+    description := "Build setup for Low Level Scala"
   )
+  .settings(ciAliases)
   .settings(noPublishSettings)
   .settings(mimaSettings)
