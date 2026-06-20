@@ -78,7 +78,18 @@ val commonSettings = Seq(
   )),
   MatrixAction.ForPlatforms(VirtualAxis.jvm).Configure(_.settings(
     fork := true,
-    Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "scalajvm"
+    Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "scalajvm",
+    // sbt 2.0 + scoverage + `fork := true`: the scoverage runtime Invoker in the *forked* test JVM
+    // writes per-thread measurement files into `<crossTarget>/scoverage-data`, but on sbt 2.0 that
+    // directory is no longer pre-created in-process before the fork starts, so every instrumented
+    // test crashes with `FileNotFoundException: .../scoverage-data/scoverage.measurements.*`. Ensure
+    // the directory exists; piggy-back on Test/compile, which every test task depends on. Harmless
+    // when coverage is off (the dir just stays empty).
+    Test / compile := Def.uncached {
+      val analysis = (Test / compile).value
+      IO.createDirectory((Test / crossTarget).value / "scoverage-data")
+      analysis
+    }
   )),
   // Scala Native 0.5.12: munit 1.3.3 pulls test-interface 0.5.12 while scalacheck 1.19.0 still pulls
   // 0.5.8. Coursier already selects 0.5.12 (the newer toolchain version), but the Scala Native
