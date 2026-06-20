@@ -4,15 +4,13 @@ on:
   push:
     branches: [master]
     tags: ["*"]
-  pull_request:
-    branches: [master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  JVM_VERSION: "zulu:25"
+  JVM_VERSION: "temurin:1.17.0.15"
 
 jobs:
   build-and-publish:
