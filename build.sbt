@@ -25,7 +25,7 @@ val dev = new DevProperties(
 )
 
 lazy val al = new Aliases(
-  published = Seq(lls),
+  published = Seq(lls, `lls-io`),
   compileOnly = Seq(`lls-bench`)
 )
 
@@ -150,6 +150,21 @@ lazy val lls = (projectMatrix in file("lls"))
   .settings(publishSettings)
   .settings(mimaSettings)
 
+lazy val `lls-io` = (projectMatrix in file("lls-io"))
+  .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
+  .someVariations(scalas, platforms)((commonSettings ++ dev.only1VersionInIDE) *)
+  .settings(
+    name := "lls-io",
+    description := "Low Level Scala — cross-platform immutable POSIX-string file paths and file operations",
+    libraryDependencies ++= Seq(
+      "org.scalameta"  %% "munit"            % munitVersion           % Test,
+      "org.scalameta"  %% "munit-scalacheck" % munitScalacheckVersion % Test,
+      "org.scalacheck" %% "scalacheck"       % scalacheckVersion      % Test
+    )
+  )
+  .settings(publishSettings)
+  .settings(mimaSettings)
+
 lazy val `lls-bench` = (projectMatrix in file("lls-bench"))
   .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
   .enablePlugins(JmhPlugin)
@@ -168,6 +183,7 @@ lazy val `lls-bench` = (projectMatrix in file("lls-bench"))
 lazy val root = (project in file("."))
   .enablePlugins(KubuszokRootPlugin)
   .aggregate(lls.projectRefs *)
+  .aggregate(`lls-io`.projectRefs *)
   .aggregate(`lls-bench`.projectRefs *)
   .settings(
     name := "lls-build",
