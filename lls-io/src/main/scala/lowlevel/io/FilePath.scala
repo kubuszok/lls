@@ -21,13 +21,19 @@ final class FilePath private[io] (val pathString: String) {
     else Some(new FilePath(dir))
   }
 
-  def resolve(other: String): FilePath =
-    if (other.isEmpty) this
-    else if (other.startsWith("/")) new FilePath(FilePath.renderPath(other))
+  def resolve(other: String): FilePath = {
+    // The child is canonicalized through the same rendering as FilePath.of (GATE-FIX 2026-07-03): the
+    // String and FilePath overloads must never diverge — resolve(s) == resolve(FilePath.of(s)) for
+    // every input, so a native drive-absolute child ("C:/x", "C:\x") is lifted to "/C:/x" and
+    // REPLACES, exactly like the already-lifted FilePath child would.
+    val child = FilePath.renderPath(other)
+    if (child.isEmpty) this
+    else if (child.startsWith("/")) new FilePath(child)
     else {
       val sep = if (pathString.endsWith("/")) "" else "/"
-      new FilePath(pathString + sep + other)
+      new FilePath(pathString + sep + child)
     }
+  }
 
   def resolve(other: FilePath): FilePath =
     resolve(other.pathString)

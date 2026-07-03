@@ -112,6 +112,43 @@ final class FilePathRenderingSuite extends munit.FunSuite {
     assert(!FilePath.of("C:name").isAbsolute)
   }
 
+  // ===== §4.2 GATE-FIX 2026-07-03: resolve(String) canonicalizes the child like of() =============
+  // (Orchestrator ruling: the String and FilePath overloads must never diverge observably.)
+
+  test("resolve of a drive-absolute string child replaces — resolve(\"C:/x\") yields /C:/x") {
+    assertEquals(FilePath.of("/base").resolve("C:/x").pathString, "/C:/x")
+  }
+
+  test("resolve of a backslash drive-absolute string child replaces — resolve(\"C:\\\\x\") yields /C:/x") {
+    assertEquals(FilePath.of("/base").resolve("C:\\x").pathString, "/C:/x")
+  }
+
+  test("resolve of a plain POSIX relative child still appends — resolve(\"a/b\") yields /base/a/b") {
+    assertEquals(FilePath.of("/base").resolve("a/b").pathString, "/base/a/b")
+  }
+
+  test("resolve(s) equals resolve(FilePath.of(s)) for every child form") {
+    val base     = FilePath.of("/base/dir")
+    val children = List(
+      "a/b", // plain relative
+      "a//b/", // non-canonical relative
+      "../x/./y", // dot segments (preserved by rendering)
+      "a:b", // colon filename (ISS-1128, not a drive)
+      "a\\b", // backslash filename (ISS-1128)
+      "/x/y", // plain absolute
+      "///x", // non-canonical absolute
+      "C:/x", // native drive-absolute (lifted)
+      "C:\\x", // native drive-absolute, backslash separators (lifted)
+      "/C:/x", // already-lifted drive form
+      "//h/s/x", // UNC
+      "//h//s", // non-canonical UNC
+      "" // empty
+    )
+    children.foreach { s =>
+      assertEquals(base.resolve(s), base.resolve(FilePath.of(s)), s"diverged for child: \"$s\"")
+    }
+  }
+
   // ===== §4.1 backslash is a legal filename char, not a separator ==================================
 
   test("of(\"a\\\\b\").pathString preserves the backslash — not converted to /") {
