@@ -14,7 +14,7 @@ val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
 // Dependencies (test)
 // munit 1.3.3+: avoids the scala-native test-interface eviction with scala-native 0.5.12 on sbt 2.0.
-val munitVersion           = "1.3.4"
+val munitVersion           = "1.3.5"
 val munitScalacheckVersion = "1.3.0"
 val scalacheckVersion      = "1.19.0"
 
