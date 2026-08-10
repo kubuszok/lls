@@ -27,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: coursier/setup-action@v3.0.0
+      - uses: coursier/setup-action@v3.0.2
         with:
           jvm: ${{ env.JVM_VERSION }}
           apps: sbt
@@ -94,7 +94,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: coursier/setup-action@v3.0.0
+      - uses: coursier/setup-action@v3.0.2
         with:
           jvm: ${{ env.JVM_VERSION }}
           apps: sbt
