@@ -1,0 +1,3 @@
+[submodule "original-src/libgdx"]
+	path = original-src/libgdx
+	url = https://github.com/libgdx/libgdx

@@ -134,6 +134,19 @@ val mimaSettings = Seq(
 
 // --- Modules ---
 
+// Baltic Porter sourceGenerator: generates Scala sources from the vendored libGDX Java originals.
+// The generator runs in the sbt JVM (once, cached by commit), writing to target/balticporter-lls/.
+// All platform variants (JVM, JS, Native) share the same generated output.
+val balticPorterSettings = Seq(
+  Compile / sourceGenerators += Def.task {
+    BalticPorterGen.generate((ThisBuild / baseDirectory).value, streams.value.log)
+  },
+  // Suppress warnings from Baltic Porter generated sources: unused private givens (the witness
+  // phase emits boxed-element givens that not every class needs) and unchecked type-arg casts
+  // (java's isInstanceOf on generic types, faithful to the upstream).
+  scalacOptions += "-Wconf:src=target/balticporter-lls/.*:s"
+)
+
 lazy val lls = (projectMatrix in file("lls"))
   .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
   .someVariations(scalas, platforms)((commonSettings ++ dev.only1VersionInIDE) *)
@@ -147,6 +160,7 @@ lazy val lls = (projectMatrix in file("lls"))
       "org.scalacheck" %% "scalacheck"       % scalacheckVersion      % Test
     )
   )
+  .settings(balticPorterSettings)
   .settings(publishSettings)
   .settings(mimaSettings)
 

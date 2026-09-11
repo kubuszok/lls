@@ -8,6 +8,7 @@ project/*
 !project/plugins.sbt
 !project/build.properties
 !project/LlsSettings.scala
+!project/BalticPorterGen.scala
 target/
 .sbt/
 

@@ -3,3 +3,7 @@
 addSbtPlugin("com.kubuszok" % "sbt-kubuszok" % "0.2.3")
 // benchmarks
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
+
+// Baltic Porter: Java->Scala 3 porting engine, runs as a sourceGenerator
+resolvers += Resolver.defaultLocal
+libraryDependencies += "com.kubuszok" %% "balticporter-corpus" % "0.1.0-SNAPSHOT"
