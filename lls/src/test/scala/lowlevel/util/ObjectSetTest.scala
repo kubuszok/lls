@@ -13,7 +13,7 @@ class ObjectSetTest extends munit.ScalaCheckSuite {
   test("empty set has size 0") {
     val set = ObjectSet[String]()
     assertEquals(set.size, 0)
-    assert(set.isEmpty)
+    assert(set.isEmpty())
   }
 
   test("add and contains") {
@@ -52,20 +52,20 @@ class ObjectSetTest extends munit.ScalaCheckSuite {
     set.add("c")
     set.clear()
     assertEquals(set.size, 0)
-    assert(set.isEmpty)
+    assert(set.isEmpty())
     assert(!set.contains("a"))
   }
 
-  test("first returns an element") {
+  test("head returns an element") {
     val set = ObjectSet[String]()
     set.add("only")
-    assertEquals(set.first, "only")
+    assertEquals(set.head, "only")
   }
 
-  test("first on empty set throws") {
+  test("head on empty set throws") {
     val set = ObjectSet[String]()
     intercept[IllegalStateException] {
-      set.first
+      set.head
     }
   }
 
@@ -85,7 +85,7 @@ class ObjectSetTest extends munit.ScalaCheckSuite {
     elements.foreach(set.add)
     elements.foreach(set.remove)
     assertEquals(set.size, 0)
-    assert(set.isEmpty)
+    assert(set.isEmpty())
   }
 
   test("foreach visits all elements") {
@@ -164,7 +164,7 @@ class ObjectSetTest extends munit.ScalaCheckSuite {
       val items = (0 until n).map(java.lang.Integer.valueOf)
       items.foreach(set.add)
       items.foreach(set.remove)
-      set.size == 0 && set.isEmpty
+      set.size == 0 && set.isEmpty()
     }
   }
 

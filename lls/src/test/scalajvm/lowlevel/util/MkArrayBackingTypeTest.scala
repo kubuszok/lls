@@ -28,7 +28,8 @@ class MkArrayBackingTypeTest extends munit.FunSuite {
   }
 
   private def assertBackingType[A](da: DynamicArray[A], expectedComponentType: Class[?])(using loc: munit.Location): Unit = {
-    val itemsField = da.getClass.getDeclaredField("_items")
+    // Machine-ported DynamicArray uses public "items" field (not "_items")
+    val itemsField = da.getClass.getDeclaredField("items")
     itemsField.setAccessible(true)
     val backingArray = itemsField.get(da)
     assertEquals(

@@ -10,7 +10,7 @@ class OrderedSetTest extends munit.FunSuite {
   test("empty set") {
     val set = OrderedSet[String]()
     assertEquals(set.size, 0)
-    assert(set.isEmpty)
+    assert(set.isEmpty())
   }
 
   test("add and contains") {
@@ -43,13 +43,13 @@ class OrderedSetTest extends munit.FunSuite {
     set.add("b")
     set.clear()
     assertEquals(set.size, 0)
-    assert(set.isEmpty)
+    assert(set.isEmpty())
   }
 
   test("first") {
     val set = OrderedSet[String]()
     set.add("only")
-    assertEquals(set.first, "only")
+    assertEquals(set.head, "only")
   }
 
   test("insertion order preserved") {

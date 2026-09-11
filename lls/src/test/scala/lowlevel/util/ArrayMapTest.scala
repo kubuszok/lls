@@ -5,18 +5,20 @@
 package lowlevel
 package util
 
+import scala.language.implicitConversions
+
 class ArrayMapTest extends munit.FunSuite {
 
   test("empty map") {
     val map = ArrayMap[String, Int]()
     assertEquals(map.size, 0)
-    assert(map.isEmpty)
+    assert(map.isEmpty())
   }
 
   test("put and get") {
     val map = ArrayMap[String, Int]()
     map.put("a", 1)
-    assertEquals(map.get("a").getOrElse(fail("missing")), 1)
+    assertEquals(map.get("a").get, 1)
     assertEquals(map.size, 1)
   }
 
@@ -25,7 +27,7 @@ class ArrayMapTest extends munit.FunSuite {
     map.put("a", 1)
     val idx = map.put("a", 2)
     assert(idx >= 0)
-    assertEquals(map.get("a").getOrElse(fail("missing")), 2)
+    assertEquals(map.get("a").get, 2)
     assertEquals(map.size, 1)
   }
 
@@ -44,7 +46,7 @@ class ArrayMapTest extends munit.FunSuite {
     map.put("a", 1)
     map.put("b", 2)
     val removed = map.removeKey("a")
-    assertEquals(removed.getOrElse(fail("expected")), 1)
+    assertEquals(removed.get, 1)
     assert(!map.containsKey("a"))
   }
 
@@ -80,12 +82,12 @@ class ArrayMapTest extends munit.FunSuite {
     map.put("b", 2)
     map.clear()
     assertEquals(map.size, 0)
-    assert(map.isEmpty)
+    assert(map.isEmpty())
   }
 
   test("get with default") {
     val map = ArrayMap[String, Int]()
-    assertEquals(map.get("missing", 99), 99)
+    assertEquals(map.get("missing", 99).get, 99)
   }
 
   test("putAll") {
