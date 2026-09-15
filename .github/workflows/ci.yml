@@ -71,6 +71,16 @@ jobs:
 
       - uses: sbt/setup-sbt@v1
 
+      - uses: coursier/setup-action@v3.0.2
+
+      - name: Checkout libGDX submodule
+        run: git submodule update --init --depth=1 original-src/libgdx
+
+      - name: Setup Baltic Porter
+        run: |
+          git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
+          cd ../balticporter && sbt --batch publishLocal
+
       - name: Run JVM tests with coverage
         run: sbt ci-jvm-3
 
@@ -98,6 +108,14 @@ jobs:
         with:
           jvm: ${{ env.JVM_VERSION }}
           apps: sbt
+
+      - name: Checkout libGDX submodule
+        run: git submodule update --init --depth=1 original-src/libgdx
+
+      - name: Setup Baltic Porter
+        run: |
+          git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
+          cd ../balticporter && sbt --batch publishLocal
 
       - name: Run Scala.js tests
         run: sbt test-js-3
@@ -135,6 +153,16 @@ jobs:
           architecture: ${{ matrix.architecture || '' }}
 
       - uses: sbt/setup-sbt@v1
+
+      - uses: coursier/setup-action@v3.0.2
+
+      - name: Checkout libGDX submodule
+        run: git submodule update --init --depth=1 original-src/libgdx
+
+      - name: Setup Baltic Porter
+        run: |
+          git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
+          cd ../balticporter && sbt --batch publishLocal
 
       - name: Install Scala Native system dependencies (Linux)
         if: runner.os == 'Linux'
