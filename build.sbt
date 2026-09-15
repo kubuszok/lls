@@ -30,7 +30,7 @@ val dev = new DevProperties(
 
 lazy val al = new Aliases(
   published = Seq(lls, `lls-io`),
-  compileOnly = Seq(`lls-bench`)
+  compileOnly = Nil
 )
 
 // CI/test command aliases (e.g. ci-jvm-3, test-js-3, test-native-3), consumed by .github/workflows/ci.yml.
