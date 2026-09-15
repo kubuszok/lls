@@ -18,6 +18,10 @@ val munitVersion           = "1.3.6"
 val munitScalacheckVersion = "1.3.1"
 val scalacheckVersion      = "1.20.0"
 
+// Exclude Baltic Porter generated code from scoverage — coverageAggregate cannot find
+// source roots for files under target/balticporter-*/src_managed/.
+ThisBuild / coverageExcludedFiles := ".*target/balticporter.*/src_managed/.*"
+
 val dev = new DevProperties(
   scala213 = None,
   scala3 = Some(scala3),
