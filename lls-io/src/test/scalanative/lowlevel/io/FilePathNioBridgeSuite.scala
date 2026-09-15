@@ -18,6 +18,16 @@ final class FilePathNioBridgeSuite extends munit.FunSuite {
   private val isWindows: Boolean =
     sys.props.getOrElse("os.name", "").toLowerCase.contains("windows")
 
+  /** True when the platform's nio implementation actually handles UNC paths (host + share preserved in toString, isAbsolute returns true). The JVM's WindowsPathParser supports this; Scala Native's
+    * nio on Windows currently does not -- it strips the UNC prefix from the path, so the bridge cannot round-trip UNC through nio on that platform.
+    */
+  private val nioSupportsUnc: Boolean = isWindows && {
+    try {
+      val p = Paths.get("\\\\test\\share\\file")
+      p.isAbsolute && p.toString.replace('\\', '/').startsWith("//")
+    } catch { case _: Exception => false }
+  }
+
   // ===== host-agnostic: toNioPath translation ======================================================
 
   test("toNioPath strips the model's leading / from a drive-absolute path — /C:/x parses as C:/x") {
@@ -73,18 +83,18 @@ final class FilePathNioBridgeSuite extends munit.FunSuite {
   }
 
   test("Windows: fromNioPath preserves the UNC marker — \\\\h\\s\\x becomes //h/s/x") {
-    assume(isWindows, "UNC nio parsing requires a Windows host")
+    assume(nioSupportsUnc, "UNC nio parsing requires a Windows host whose nio handles UNC paths")
     assertEquals(FilePathNio.fromNioPath(Paths.get("\\\\h\\s\\x")).pathString, "//h/s/x")
   }
 
   test("Windows: the UNC model form round-trips through nio") {
-    assume(isWindows, "UNC nio parsing requires a Windows host")
+    assume(nioSupportsUnc, "UNC nio parsing requires a Windows host whose nio handles UNC paths")
     val p = FilePath.of("//h/s/x")
     assertEquals(FilePathNio.fromNioPath(FilePathNio.toNioPath(p)), p)
   }
 
   test("Windows: toNioPath of the UNC model form parses as an absolute (UNC) nio path") {
-    assume(isWindows, "UNC nio parsing requires a Windows host")
+    assume(nioSupportsUnc, "UNC nio parsing requires a Windows host whose nio handles UNC paths")
     assert(FilePathNio.toNioPath(FilePath.of("//h/s/x")).isAbsolute)
   }
 
