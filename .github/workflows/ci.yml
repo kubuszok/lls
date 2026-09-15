@@ -79,7 +79,7 @@ jobs:
       - name: Setup Baltic Porter
         run: |
           git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
-          cd ../balticporter && sbt --batch 'set every (Compile / doc / sources) := Nil; publishLocal'
+          cd ../balticporter && sbt --batch publishLocal
 
       - name: Run JVM tests with coverage
         run: sbt ci-jvm-3
@@ -115,7 +115,7 @@ jobs:
       - name: Setup Baltic Porter
         run: |
           git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
-          cd ../balticporter && sbt --batch 'set every (Compile / doc / sources) := Nil; publishLocal'
+          cd ../balticporter && sbt --batch publishLocal
 
       - name: Run Scala.js tests
         run: sbt test-js-3
@@ -162,7 +162,7 @@ jobs:
       - name: Setup Baltic Porter
         run: |
           git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
-          cd ../balticporter && sbt --batch 'set every (Compile / doc / sources) := Nil; publishLocal'
+          cd ../balticporter && sbt --batch publishLocal
 
       - name: Install Scala Native system dependencies (Linux)
         if: runner.os == 'Linux'
