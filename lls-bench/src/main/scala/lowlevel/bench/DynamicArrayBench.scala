@@ -99,7 +99,7 @@ class DynamicArrayBench {
   // --- Sort ---
 
   @Benchmark
-  def sortInt(): Unit = intArray.sort()(using Ordering.Int.reverse)
+  def sortInt(): Unit = intArray.sort()
 
   // --- Bulk ---
 
@@ -111,5 +111,5 @@ class DynamicArrayBench {
   }
 
   @Benchmark
-  def toArray(): Array[Int] = intArray.toArray
+  def toArray(): Array[Int] = intArray.toArray()
 }

@@ -145,6 +145,7 @@ val balticPorterSettings = Seq(
   Compile / sourceGenerators += Def.task {
     BalticPorterGen.generate((ThisBuild / baseDirectory).value, streams.value.log)
   },
+  Compile / managedSourceDirectories += (ThisBuild / baseDirectory).value / "target" / "balticporter-lls" / "src_managed" / "main" / "scala",
   // Suppress warnings from Baltic Porter generated sources: unused private givens (the witness
   // phase emits boxed-element givens that not every class needs) and unchecked type-arg casts
   // (java's isInstanceOf on generic types, faithful to the upstream).

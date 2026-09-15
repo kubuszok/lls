@@ -17,57 +17,51 @@ class ObjectMapBench {
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var keys:    Array[String]          = uninitialized
-  private var map:     ObjectMap[String, Int] = uninitialized
-  private var intMap:  ObjectMap[Int, Int]    = uninitialized
-  private var nextKey: Int                    = uninitialized
+  private var keys:    Array[String]                                   = uninitialized
+  private var map:     ObjectMap[String, java.lang.Integer]            = uninitialized
+  private var intMap:  ObjectMap[java.lang.Integer, java.lang.Integer] = uninitialized
+  private var nextKey: Int                                             = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {
     keys = Array.tabulate(size)(i => s"key$i")
-    map = ObjectMap[String, Int](size)
+    map = ObjectMap[String, java.lang.Integer](size)
     var i = 0
-    while (i < size) { map.put(keys(i), i); i += 1 }
+    while (i < size) { map.put(keys(i), Nullable(i: java.lang.Integer)); i += 1 }
 
-    intMap = ObjectMap[Int, Int](size)
+    intMap = ObjectMap[java.lang.Integer, java.lang.Integer](size)
     i = 0
-    while (i < size) { intMap.put(i, i * 10); i += 1 }
+    while (i < size) { intMap.put(i: java.lang.Integer, Nullable((i * 10): java.lang.Integer)); i += 1 }
 
     nextKey = size
   }
 
-  // --- Put ---
+  @Benchmark
+  def putNew(): Nullable[java.lang.Integer] = map.put(s"key$nextKey", Nullable(nextKey: java.lang.Integer))
 
   @Benchmark
-  def putNew(): Nullable[Int] = map.put(s"key$nextKey", nextKey)
+  def putExisting(): Nullable[java.lang.Integer] = map.put(keys(size / 2), Nullable(999: java.lang.Integer))
 
   @Benchmark
-  def putExisting(): Nullable[Int] = map.put(keys(size / 2), 999)
+  def putIntNew(): Nullable[java.lang.Integer] = intMap.put(nextKey: java.lang.Integer, Nullable((nextKey * 10): java.lang.Integer))
 
   @Benchmark
-  def putIntNew(): Nullable[Int] = intMap.put(nextKey, nextKey * 10)
+  def putIntExisting(): Nullable[java.lang.Integer] = intMap.put((size / 2): java.lang.Integer, Nullable(999: java.lang.Integer))
 
   @Benchmark
-  def putIntExisting(): Nullable[Int] = intMap.put(size / 2, 999)
-
-  // --- Get ---
+  def getHit(): Nullable[java.lang.Integer] = map.get(keys(size / 2))
 
   @Benchmark
-  def getHit(): Nullable[Int] = map.get(keys(size / 2))
+  def getMiss(): Nullable[java.lang.Integer] = map.get("missing")
 
   @Benchmark
-  def getMiss(): Nullable[Int] = map.get("missing")
+  def getIntHit(): Nullable[java.lang.Integer] = intMap.get((size / 2): java.lang.Integer)
 
   @Benchmark
-  def getIntHit(): Nullable[Int] = intMap.get(size / 2)
+  def getIntMiss(): Nullable[java.lang.Integer] = intMap.get(-1: java.lang.Integer)
 
   @Benchmark
-  def getIntMiss(): Nullable[Int] = intMap.get(-1)
-
-  @Benchmark
-  def getWithDefault(): Int = map.get("missing", -1)
-
-  // --- ContainsKey ---
+  def getWithDefault(): java.lang.Integer = map.get("missing", Nullable(-1: java.lang.Integer)).nn
 
   @Benchmark
   def containsKeyHit(): Boolean = map.containsKey(keys(size / 2))
@@ -75,20 +69,16 @@ class ObjectMapBench {
   @Benchmark
   def containsKeyMiss(): Boolean = map.containsKey("missing")
 
-  // --- Remove ---
+  @Benchmark
+  def removeHit(): Nullable[java.lang.Integer] = map.remove(keys(size / 2))
 
   @Benchmark
-  def removeHit(): Nullable[Int] = map.remove(keys(size / 2))
-
-  @Benchmark
-  def removeMiss(): Nullable[Int] = map.remove("missing")
-
-  // --- Iteration ---
+  def removeMiss(): Nullable[java.lang.Integer] = map.remove("missing")
 
   @Benchmark
   def foreachEntry(): Int = {
     var sum = 0
-    map.foreachEntry((_, v) => sum += v)
+    map.foreachEntry((_, v) => sum += v.nn.intValue)
     sum
   }
 
@@ -99,18 +89,16 @@ class ObjectMapBench {
     sum
   }
 
-  // --- Bulk ---
-
   @Benchmark
   def clearAndRefill(): Unit = {
     map.clear()
     var i = 0
-    while (i < size) { map.put(keys(i), i); i += 1 }
+    while (i < size) { map.put(keys(i), Nullable(i: java.lang.Integer)); i += 1 }
   }
 
   @Benchmark
   def putAllFromCopy(): Unit = {
-    val dest = ObjectMap[String, Int](size)
+    val dest = ObjectMap[String, java.lang.Integer](size)
     dest.putAll(map)
   }
 }

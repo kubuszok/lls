@@ -17,9 +17,9 @@ class ObjectSetBench {
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var keys:   Array[String]     = uninitialized
-  private var set:    ObjectSet[String] = uninitialized
-  private var intSet: ObjectSet[Int]    = uninitialized
+  private var keys:   Array[String]                = uninitialized
+  private var set:    ObjectSet[String]            = uninitialized
+  private var intSet: ObjectSet[java.lang.Integer] = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {
@@ -28,7 +28,7 @@ class ObjectSetBench {
     var i = 0
     while (i < size) { set.add(keys(i)); i += 1 }
 
-    intSet = ObjectSet[Int](size)
+    intSet = ObjectSet[java.lang.Integer](size)
     i = 0
     while (i < size) { intSet.add(i); i += 1 }
   }
