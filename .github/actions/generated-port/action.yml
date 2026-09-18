@@ -21,7 +21,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: kubuszok/balticporter/.github/actions/generated-port@38742ae59addfc2e6bc9865c5f22620fbf807323
+    - uses: kubuszok/balticporter/.github/actions/generated-port@8d0cf549f1e8a501c772975301013f3b3b0af19f
       id: port
       with:
         mode: ${{ inputs.mode }}
