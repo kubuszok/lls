@@ -7,7 +7,7 @@ import kubuszok.sbt.KubuszokPlugin.autoImport._
 // sbt 2.0's build dialect drops the structural-type refinement on `new { ... }`, so `versions.scala3`
 // fails to resolve, and top-level objects aren't visible to lifted setting expressions either.
 // Use plain top-level vals (the proven sbt-2.0 pattern).
-val scala3 = "3.8.4"
+val scala3 = "3.9.0"
 
 val scalas    = List(scala3)
 val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
