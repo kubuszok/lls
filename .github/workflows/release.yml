@@ -22,22 +22,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: coursier/cache-action@v8
       - name: Import GPG key for signing the release
         uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
-      - uses: coursier/setup-action@v3.0.2
+      - uses: ./.github/actions/setup-scala
         with:
           jvm: ${{ env.JVM_VERSION }}
-          apps: sbt
-      - name: Checkout libGDX submodule
-        run: git submodule update --init --depth=1 original-src/libgdx
-      - name: Setup Baltic Porter
-        run: |
-          git clone --depth=1 https://github.com/kubuszok/balticporter.git ../balticporter
-          cd ../balticporter && sbt --batch publishLocal
+      # the generated sources must be in the published JAR; the engine is a published artifact
+      - uses: ./.github/actions/generated-port
+        with:
+          mode: generate
       - name: Publish all projects
         run: sbt ci-release
         env:

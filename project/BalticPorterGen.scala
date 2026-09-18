@@ -7,35 +7,48 @@ import java.nio.file.{ Files, Path }
   *
   * Requires:
   *   - libGDX sources at `original-src/libgdx/gdx/src` (git submodule)
-  *   - balticporter checkout at `../balticporter` (sibling directory) for inject files and classpath cache; override with `-Dbalticporter.root=<path>`
-  *   - `balticporter-corpus` 0.1.0-SNAPSHOT published locally (`sbt publishLocal` in balticporter)
+  *   - the `balticporter-corpus` artifact pinned in `project/plugins.sbt` (it carries the files the policy injects; no engine checkout is needed)
+  *   - `cs` (coursier) on the PATH, to resolve the classpath libGDX's own sources are read against
   */
 object BalticPorterGen {
 
-  /** Generate lls Scala sources from libGDX Java originals. Caches by upstream commit. */
-  def generate(buildBase: File, log: sbt.util.Logger): Seq[File] = {
-    val llsRoot = buildBase.toPath.toAbsolutePath.normalize
-    val bpRoot  = Path.of(sys.props.getOrElse("balticporter.root", llsRoot.resolve("../balticporter").toString)).toAbsolutePath.normalize
+  // sbt evaluates the JVM/JS/Native rows' managedSources in parallel; they share one output tree, so
+  // the rows serialise here and the later ones read the marker the first one wrote.
+  def generate(buildBase: File, log: sbt.util.Logger): Seq[File] =
+    BalticPorterGen.synchronized(generateUnlocked(buildBase, log))
 
+  private def generateUnlocked(buildBase: File, log: sbt.util.Logger): Seq[File] = {
+    val llsRoot   = buildBase.toPath.toAbsolutePath.normalize
     val libgdxSrc = llsRoot.resolve("original-src/libgdx/gdx/src")
-    if (!Files.isDirectory(libgdxSrc) || !Files.isDirectory(bpRoot.resolve("balticporter/corpus"))) {
-      log.warn("[Baltic Porter] No libGDX submodule or balticporter sibling — skipping lls generation")
-      val outDir = llsRoot.resolve("target/balticporter-lls/src_managed/main/scala")
-      return if (Files.isDirectory(outDir)) collectScalaFiles(outDir) else Nil
-    }
+    val portRoot  = llsRoot.resolve("target/balticporter-lls")
+    val outDir    = portRoot.resolve("src_managed/main/scala")
+    val marker    = portRoot.resolve(".generated-marker")
 
-    val portRoot = llsRoot.resolve("target/balticporter-lls")
-    val outDir   = portRoot.resolve("src_managed/main/scala")
-    val marker   = portRoot.resolve(".generated-marker")
+    // Cache key: everything the generated tree depends on (see `fingerprint`), readable without the
+    // submodule's files — so a checkout that RECEIVED the generated tree (a CI job restoring the
+    // `generate` job's output) reuses it and needs neither the submodule nor a generation run.
+    // Force a regeneration with -Dbalticporter.forceRegen=true, or delete the marker.
+    val forceRegen = sys.props.getOrElse("balticporter.forceRegen", "false").toBoolean
+    val expected   = fingerprint(llsRoot)
+    val cached     = !forceRegen && Files.exists(marker) && Files.exists(outDir) && Files.readString(marker).trim == expected
 
-    // Cache key: the vendored tree's commit
-    val commit = balticporter.runner.VendoredCommit.of(libgdxSrc)
-    val cached = Files.exists(marker) &&
-      Files.exists(outDir) &&
-      Files.readString(marker).trim == commit
+    if (!cached && !Files.isDirectory(libgdxSrc))
+      sys.error(
+        "[Baltic Porter] The generated lls sources are missing or stale (" + marker + " does not read `" + expected + "`) and the libGDX submodule is not " +
+          "initialised. Run `git submodule update --init --depth=1 original-src/libgdx`, or place a generated tree with a matching marker under " + portRoot + "."
+      )
 
     if (!cached) {
+      val commit = balticporter.runner.VendoredCommit.of(libgdxSrc)
       log.info(s"[Baltic Porter] Generating lls sources from libGDX ($commit)")
+
+      // The files the port's policy injects by path ship inside the published corpus jar and are
+      // unpacked under target/; -Dbalticporter.root=<engine checkout> reads them from a checkout
+      // instead (engine development only).
+      val bpRoot = sys.props.get("balticporter.root") match {
+        case Some(root) => Path.of(root).toAbsolutePath.normalize
+        case None       => balticporter.corpus.BundledCorpus.root(llsRoot.resolve("target/balticporter-engine"))
+      }
 
       val rungs = balticporter.corpus.lls.LlsPolicy.DefaultRungs
       // Disable parity check: the hand-ported files are being replaced by these generated ones.
@@ -71,132 +84,42 @@ object BalticPorterGen {
         )
         .execute()
 
-      // Scala.js workaround: the engine emits named boundary/break or local-def+return for
-      // Java's labeled `break outer;` across nested loops. Scala.js incorrectly lowers these
-      // to a JS `break` that exits only the innermost loop. Replace with throw/catch using a
-      // ControlThrowable sentinel that exception propagation handles correctly on all backends.
-      patchNamedBreaks(outDir, log)
-
       Files.createDirectories(marker.getParent)
-      Files.writeString(marker, commit)
+      Files.writeString(marker, expected)
       log.info(s"[Baltic Porter] Generated ${result.written} files to $outDir")
     } else {
-      log.info(s"[Baltic Porter] Using cached generated sources ($commit)")
+      log.info(s"[Baltic Porter] Using cached generated sources ($expected)")
     }
 
     collectScalaFiles(outDir)
   }
 
-  /** Patch generated Scala files that contain named boundary/break patterns. Uses literal string replacement on the known generated patterns -- not regex -- to avoid corrupting unrelated text.
-    *
-    * Two forms the engine may produce: (A) `scala.util.boundary { (brk$N: scala.util.boundary.Label[scala.Unit]) ?=> LOOP }` with `scala.util.boundary.break(())(using brk$N)` for breaks (B)
-    * `{ def brk$N(): scala.Unit = { LOOP }; brk$N() }` with `return` for breaks
-    *
-    * Both are replaced with throw/catch: `{ val brk$N = new scala.util.control.ControlThrowable {}; try { LOOP } catch { ... } }` with `throw brk$N` for breaks
+  /** What the generated tree depends on, as one line, readable on a shallow checkout WITHOUT the submodule's files: the engine artifact pinned in `project/plugins.sbt`, the libGDX commit (the
+    * submodule's HEAD when it is initialised, else the commit this checkout records for it), this generator (line endings normalised, so every OS agrees) and the JDK feature version.
     */
-  private def patchNamedBreaks(outDir: Path, log: sbt.util.Logger): Unit = {
-    val stream = Files.walk(outDir)
-    try
-      stream.forEach { p =>
-        if (p.toString.endsWith(".scala")) {
-          val content = Files.readString(p)
-          // Only patch files that have the boundary-with-named-label pattern or the def-brk pattern
-          val hasPatternA = content.contains("scala.util.boundary.break(())(using brk$")
-          val hasPatternB = content.contains("{ def brk$") && content.contains("(); brk$")
-          if (hasPatternA || hasPatternB) {
-            val patched = patchContent(content, hasPatternA, hasPatternB)
-            if (patched != content) {
-              Files.writeString(p, patched)
-              log.info("[Baltic Porter] Patched " + p.getFileName + " for Scala.js labeled-break compatibility")
-            }
-          }
-        }
-      }
-    finally stream.close()
-  }
-
-  private def patchContent(content: String, hasA: Boolean, hasB: Boolean): String = {
-    var text = content
-
-    if (hasA) {
-      // Find all named break labels used in pattern A
-      val namePattern = java.util.regex.Pattern.compile("scala\\.util\\.boundary\\.break\\(\\(\\)\\)\\(using (brk\\$\\d+)\\)")
-      val matcher     = namePattern.matcher(text)
-      val names       = scala.collection.mutable.Set[String]()
-      while (matcher.find()) names += matcher.group(1)
-
-      for (name <- names) {
-        // Replace the boundary opening
-        text = text.replace(
-          s"scala.util.boundary { ($name: scala.util.boundary.Label[scala.Unit]) ?=>",
-          s"{ val $name = new scala.util.control.ControlThrowable {}; try {"
-        )
-        // Replace break calls
-        text = text.replace(
-          s"scala.util.boundary.break(())(using $name)",
-          s"throw $name"
-        )
-        // Replace boundary closing: the boundary block ends with `} }` after the while loop.
-        // After our replacement, we have `try { while(true) { ... } }` and need to add catch.
-        // Find the `try {` we inserted and brace-match to its closing `}`.
-        text = addCatchClause(text, name)
-      }
+  def fingerprint(llsRoot: Path): String = {
+    def git(dir: Path, args: String*): Option[String] = {
+      val pb = new ProcessBuilder(("git" +: args)*)
+      pb.directory(dir.toFile)
+      pb.redirectErrorStream(true)
+      val p   = pb.start()
+      val out = new String(p.getInputStream.readAllBytes()).trim
+      if (p.waitFor() == 0 && out.nonEmpty) Some(out) else None
     }
-
-    if (hasB) {
-      val namePattern = java.util.regex.Pattern.compile("\\{ def (brk\\$\\d+)\\(\\): scala\\.Unit = \\{")
-      val matcher     = namePattern.matcher(text)
-      val names       = scala.collection.mutable.Set[String]()
-      while (matcher.find()) names += matcher.group(1)
-
-      for (name <- names) {
-        // Replace def opening
-        text = text.replace(
-          s"{ def $name(): scala.Unit = {",
-          s"{ val $name = new scala.util.control.ControlThrowable {}; try {"
-        )
-        // Replace def closing
-        text = text.replace(
-          s"}; $name() }",
-          s"} catch { case $$e: scala.util.control.ControlThrowable if $$e eq $name => () } }"
-        )
-        // Replace return with throw (only standalone returns, not return-values)
-        text = text.replaceAll("(?m)^(\\s+)return$", s"$$1throw $name")
-      }
-    }
-
-    text
-  }
-
-  /** Find the `try {` block for the given sentinel and add a catch clause at its closing `}`. */
-  private def addCatchClause(text: String, name: String): String = {
-    val tryMarker = s"val $name = new scala.util.control.ControlThrowable {}; try {"
-    val idx       = text.indexOf(tryMarker)
-    if (idx < 0) return text
-
-    // Start scanning after `try {`
-    val tryOpenIdx = text.indexOf("try {", idx)
-    if (tryOpenIdx < 0) return text
-    val scanStart = tryOpenIdx + 5
-
-    // Brace-match to find the closing `}` of the try body
-    var depth = 1
-    var j     = scanStart
-    // Skip string literals and comments to avoid matching braces inside them
-    while (j < text.length && depth > 0) {
-      val ch = text.charAt(j)
-      if (ch == '{') depth += 1
-      else if (ch == '}') depth -= 1
-      j += 1
-    }
-    // j is now past the `}` closing the try body
-    if (depth != 0) return text // unbalanced braces, don't patch
-
-    // Insert catch clause. The replacement added an extra `{` (for `{ val brk$N = ...`)
-    // where the original boundary had only one. So we need `catch { ... } }` to close both
-    // the try and the outer val block.
-    val catchClause = s" catch { case $$e: scala.util.control.ControlThrowable if $$e eq $name => () } }"
-    text.substring(0, j) + catchClause + text.substring(j)
+    val pin = """balticporter-corpus" % "([^"]+)"""".r
+      .findFirstMatchIn(Files.readString(llsRoot.resolve("project/plugins.sbt")))
+      .map(_.group(1))
+      .getOrElse(sys.error("[Baltic Porter] project/plugins.sbt pins no balticporter-corpus version"))
+    val submodule = llsRoot.resolve("original-src/libgdx")
+    val libgdx    = (if (Files.exists(submodule.resolve(".git"))) git(submodule, "rev-parse", "HEAD") else None)
+      .orElse(git(llsRoot, "ls-tree", "HEAD", "original-src/libgdx").flatMap(_.split("\\s+").lift(2)))
+      .getOrElse(
+        sys.error("[Baltic Porter] cannot read the libGDX commit this checkout records (git ls-tree HEAD original-src/libgdx)")
+      )
+    val source    = Files.readString(llsRoot.resolve("project/BalticPorterGen.scala")).replace("\r", "")
+    val generator = java.security.MessageDigest.getInstance("SHA-256").digest(source.getBytes("UTF-8")).take(8).map(b => f"$b%02x").mkString
+    // the JDK the generator runs on decides what a member overrides
+    s"engine=$pin libgdx=$libgdx generator=$generator jdk=${java.lang.Runtime.version().feature()}"
   }
 
   private def collectScalaFiles(dir: Path): Seq[File] = {

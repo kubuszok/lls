@@ -1,0 +1,30 @@
+name: Generated port
+description: >
+  The Baltic Porter output (target/balticporter-lls) for this commit, generated ONCE per distinct
+  input set and shared between jobs through the Actions cache — see the action this wraps.
+  `generate` needs the Scala toolchain; `restore` needs nothing, and no submodule.
+  The `uses:` line below is the ONE place the shared action's version is pinned.
+
+inputs:
+  mode:
+    description: generate | restore
+    default: restore
+  key:
+    description: cache key to restore (the `key` output of the `generate` mode); required for `restore`
+    default: ""
+
+outputs:
+  key:
+    description: the cache key the generated tree is stored under
+    value: ${{ steps.port.outputs.key }}
+
+runs:
+  using: composite
+  steps:
+    - uses: kubuszok/balticporter/.github/actions/generated-port@38742ae59addfc2e6bc9865c5f22620fbf807323
+      id: port
+      with:
+        mode: ${{ inputs.mode }}
+        key: ${{ inputs.key }}
+        path: target/balticporter-lls
+        submodule: original-src/libgdx

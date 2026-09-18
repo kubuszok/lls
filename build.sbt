@@ -52,6 +52,12 @@ def fullTests(command: String): String =
     }
     .mkString(" ; ")
 
+// The ci alias opens with `clean`, which deletes target/balticporter-lls — the generated sources —
+// and forces a regeneration (on CI it throws away the tree the `generate` job produced). A CI runner
+// starts from an empty target/, so the step buys nothing there; locally run `clean` yourself.
+def dropClean(command: String): String =
+  command.split(";").map(_.trim).filterNot(_ == "clean").mkString(" ; ")
+
 lazy val ciAliases: Seq[Def.Setting[?]] = {
   val platformNames = List("JVM", "JS", "Native")
   val scalaBinaries = List("3")
@@ -59,10 +65,28 @@ lazy val ciAliases: Seq[Def.Setting[?]] = {
     platform    <- platformNames
     scalaBinary <- scalaBinaries
     setting <-
-      addCommandAlias(aliasName("ci", platform, scalaBinary), fullTests(al.ci(platform, scalaBinary))) ++
+      addCommandAlias(aliasName("ci", platform, scalaBinary), dropClean(fullTests(al.ci(platform, scalaBinary)))) ++
         addCommandAlias(aliasName("test", platform, scalaBinary), fullTests(al.test(platform, scalaBinary)))
   } yield setting
-  perCombination ++ addCommandAlias("ci-release", al.release)
+  perCombination ++ addCommandAlias("ci-release", al.release) ++
+    // generatePort: run the Baltic Porter generation and nothing else (the CI `generate` job)
+    addCommandAlias("generatePort", "lls/Compile/managedSources") ++
+    // verifyLocal: the gate before a push — every platform's tests, then record the verified commit
+    addCommandAlias("verifyLocal", "ci-jvm-3 ; test-js-3 ; test-native-3 ; markVerified")
+}
+
+// Records the commit the local gate passed on (target/local-verification); the push hook of the
+// balticporter Claude Code plugin reads it. A dirty tree is not a commit, so nothing is recorded.
+val markVerified = taskKey[Unit]("Record HEAD as locally verified")
+ThisBuild / markVerified := Def.uncached {
+  import scala.sys.process.*
+  val base  = (ThisBuild / baseDirectory).value
+  val log   = streams.value.log
+  val dirty = Process(Seq("git", "status", "--porcelain", "--untracked-files=no"), base).!!.trim
+  if (dirty.nonEmpty) sys.error("[verifyLocal] the working tree has uncommitted changes — commit first, then verify that commit:\n" + dirty)
+  val head = Process(Seq("git", "rev-parse", "HEAD"), base).!!.trim
+  IO.write(base / "target" / "local-verification", head)
+  log.info(s"[verifyLocal] recorded $head")
 }
 
 val commonSettings = Seq(

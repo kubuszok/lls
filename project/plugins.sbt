@@ -6,4 +6,4 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 
 // Baltic Porter: Java->Scala 3 porting engine, runs as a sourceGenerator
 resolvers += "Central Portal Snapshots" at "https://central.sonatype.com/repository/maven-snapshots"
-libraryDependencies += "com.kubuszok" %% "balticporter-corpus" % "ea3ad52f91f70fb1eeadf10c29d51d0bef98faa3-SNAPSHOT"
+libraryDependencies += "com.kubuszok" %% "balticporter-corpus" % "38742ae59addfc2e6bc9865c5f22620fbf807323-SNAPSHOT"
