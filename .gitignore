@@ -32,6 +32,9 @@ target/
 ## Build artifacts
 .scala-build/
 
+## re-scale cross-process locks for TSV writes
+.rescale/data/*.lock
+
 ## OS-Specific
 .DS_Store
 Thumbs.db

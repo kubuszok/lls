@@ -1,0 +1,5 @@
+# re-scale Issues Database
+# id	file_path	category	status	severity	description	last_updated	source
+ISS-001	(multiple)	other	open	major	Every API difference between lls and the Java original needs a recorded justification or a fix: a difference is acceptable only when it adds Nullable, makes something final, or adds a test; otherwise Java's spelling wins	2026-09-18	manual
+ISS-002	lls-bench/baseline.txt	performance	open	minor	The JMH suites have not been re-run since lls became generated code; compare against the recorded baseline on the same machine and JDK and report regressions beyond noise	2026-09-18	manual
+ISS-003	lls/src/main/scala/lowlevel/ArrayView.scala	performance	open	minor	A filtered for-comprehension over an ArrayView still allocates: zipWithIndex builds a pair per element and a guard holds the predicate as a function object (checked by OverheadClaimsSuite; the README states it)	2026-09-18	manual
