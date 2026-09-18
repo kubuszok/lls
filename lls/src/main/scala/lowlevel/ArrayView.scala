@@ -25,8 +25,9 @@ object ArrayView {
       var i   = 0
       while (i < arr.length) {
         inline erasedValue[ZipWithIndex] match {
-          case _: true  => f.asInstanceOf[((A, Int)) => Unit]((arr(i), i))
-          case _: false => f.asInstanceOf[A => Unit](arr(i))
+          // the ARGUMENT is cast, never the function: a cast function is not beta-reduced and stays a closure
+          case _: true  => f((arr(i), i).asInstanceOf[In[A, ZipWithIndex]])
+          case _: false => f(arr(i).asInstanceOf[In[A, ZipWithIndex]])
         }
         i += 1
       }

@@ -20,16 +20,14 @@ Sealed trait hierarchy with final subclasses per primitive type (`OfInts`, `OfLo
 **`MkArray.withResolved`** uses `summonFrom` + polymorphic function types to preserve the concrete subclass type through inline method bodies, enabling fully specialized element access at call sites.
 
 ### Zero-allocation array views: `ArrayView`
-Opaque type over `Array[A]` with type-level boolean parameters encoding view state (IArray vs Array, zipWithIndex vs plain). All methods are `inline`, eliminating lambda, tuple, and wrapper allocation in for-comprehensions:
+Opaque type over `Array[A]` with type-level boolean parameters encoding view state (IArray vs Array, zipWithIndex vs plain). All methods are `inline`, so a for-comprehension over a view is expanded into a plain `while` loop at the call site:
 
 ```scala
-for {
-  (elem, i) <- array.leanView.zipWithIndex
-  if i % 2 == 0
-} yield elem * 10
+for (elem <- array.leanView) sum += elem * 10          // no Function1, no boxing, no wrapper
+for ((elem, i) <- array.leanView.zipWithIndex) ...     // no Function1; the (elem, i) pair is built per element
 ```
 
-No `Function1`, no `Tuple2`, no intermediate collection allocated — verified via `javap`.
+What is and is not allocated is checked against the compiled bytecode by `OverheadClaimsSuite` (it reads `javap -c` of the examples). A guard (`if …`) currently goes through a filtered view that holds the predicate as a function object.
 
 ### Allocation-free option type: `Nullable[A]`
 Opaque union type (`A | NestedNone`) that stores values directly without wrapping (unlike `Option`/`Some`). Nested `None` values are cached for depths 0–9.
