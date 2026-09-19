@@ -445,9 +445,7 @@ class DynamicArrayTest extends munit.FunSuite {
 
   // ---- Transform ----
 
-  // NOTE: Machine-ported sort on primitive-backed DynamicArray[Int] throws ClassCastException
-  // (int[] cannot be cast to Object[]) -- a known limitation of the generated code.
-  test("sort with default ordering".ignore) {
+  test("sort with default ordering") {
     val arr = DynamicArray[Int]()
     arr.add(3, 1, 2)
     arr.sort()
@@ -456,7 +454,7 @@ class DynamicArrayTest extends munit.FunSuite {
     assertEquals(arr(2), 3)
   }
 
-  test("sort with explicit ordering".ignore) {
+  test("sort with explicit ordering") {
     val arr = DynamicArray[Int]()
     arr.add(3, 1, 2)
     arr.sort(Ordering.Int.reverse)
@@ -597,8 +595,7 @@ class DynamicArrayTest extends munit.FunSuite {
 
   // ---- Equality and hashCode ----
 
-  // NOTE: Machine-ported equals on primitive-backed DynamicArray throws ClassCastException
-  test("equality for ordered arrays with same elements".ignore) {
+  test("equality for ordered arrays with same elements") {
     val a = DynamicArray[Int]()
     a.add(1, 2, 3)
     val b = DynamicArray[Int]()
@@ -607,7 +604,7 @@ class DynamicArrayTest extends munit.FunSuite {
     assertEquals(a.hashCode(), b.hashCode())
   }
 
-  test("inequality for different elements".ignore) {
+  test("inequality for different elements") {
     val a = DynamicArray[Int]()
     a.add(1, 2, 3)
     val b = DynamicArray[Int]()

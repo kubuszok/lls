@@ -196,8 +196,7 @@ class DynamicArrayLongSuite extends munit.FunSuite {
 
   // ---- equals ----
 
-  // NOTE: Machine-ported equals on primitive-backed DynamicArray throws ClassCastException
-  test("Long: equality for same content ordered arrays".ignore) {
+  test("Long: equality for same content ordered arrays") {
     val arr1 = DynamicArray[Long]()
     val arr2 = DynamicArray[Long]()
     arr1.add(1L, 2L)
@@ -220,7 +219,7 @@ class DynamicArrayLongSuite extends munit.FunSuite {
     assert(arr1 != arr3)
   }
 
-  test("Long: capacity does not affect equality".ignore) {
+  test("Long: capacity does not affect equality") {
     val arr1 = DynamicArray[Long]()
     arr1.add(1L, 2L)
     val arr4 = DynamicArray[Long](true, 12)
@@ -423,8 +422,7 @@ class DynamicArrayLongSuite extends munit.FunSuite {
 
   // ---- sort and reverse combined ----
 
-  // NOTE: Machine-ported sort on primitive-backed DynamicArray throws ClassCastException
-  test("Long: sort then reverse".ignore) {
+  test("Long: sort then reverse") {
     val arr    = DynamicArray[Long]()
     val values = Array(1L, 2L, 4L, 6L, 32L, 53L, 564L, 53L, 2L, 1L, 89L, 90L, 10L, 389L, 8L, 392L, 4L, 27346L, 2L, 234L, 12L)
     arr.addAll(values, 0, values.length)

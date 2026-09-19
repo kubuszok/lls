@@ -80,8 +80,7 @@ class MkArraySpecializedTest extends munit.FunSuite {
     assertEquals(da.indexOf(Pixels(30)), 2)
   }
 
-  // NOTE: Machine-ported sort on primitive-backed DynamicArray throws ClassCastException
-  test("DynamicArray[Pixels] sort works".ignore) {
+  test("DynamicArray[Pixels] sort works") {
     val da = DynamicArray[Pixels](4)
     da.add(Pixels(30))
     da.add(Pixels(10))
