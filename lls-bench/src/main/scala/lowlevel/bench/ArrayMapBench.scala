@@ -14,51 +14,76 @@ import java.util.concurrent.TimeUnit
 @State(Scope.Thread)
 class ArrayMapBench {
 
+  @Benchmark
+  def putNew(s: ArrayMapWriteState): Int = s.map.put(s"key${s.size}", s.size)
+
+  @Benchmark
+  def putExisting(s: ArrayMapWriteState): Int = s.map.put(s.keys(s.size / 2), 999)
+
+  @Benchmark
+  def getHit(s: ArrayMapReadState): Nullable[Int] = s.map.get(s.keys(s.size / 2))
+
+  @Benchmark
+  def getMiss(s: ArrayMapReadState): Nullable[Int] = s.map.get("missing")
+
+  @Benchmark
+  def containsKeyHit(s: ArrayMapReadState): Boolean = s.map.containsKey(s.keys(s.size / 2))
+
+  @Benchmark
+  def containsKeyMiss(s: ArrayMapReadState): Boolean = s.map.containsKey("missing")
+
+  @Benchmark
+  def removeKey(s: ArrayMapWriteState): Nullable[Int] = s.map.removeKey(s.keys(s.size / 2))
+
+  @Benchmark
+  def foreachEntry(s: ArrayMapReadState): Int = {
+    var sum = 0
+    s.map.foreachEntry((_, v) => sum += v)
+    sum
+  }
+
+  @Benchmark
+  def clearAndRefill(s: ArrayMapWriteState): Unit = {
+    s.map.clear()
+    var i = 0
+    while (i < s.size) { s.map.put(s.keys(i), i); i += 1 }
+  }
+}
+
+// Read-only benchmarks (get/contains/foreach) do not modify the map, so the map is built once per
+// iteration rather than before every invocation.
+@State(Scope.Thread)
+class ArrayMapReadState {
+
   @Param(Array("100", "1000"))
   var size: Int = uninitialized
 
-  private var keys: Array[String]         = uninitialized
-  private var map:  ArrayMap[String, Int] = uninitialized
+  var keys: Array[String]         = uninitialized
+  var map:  ArrayMap[String, Int] = uninitialized
 
-  @Setup(Level.Invocation)
+  @Setup(Level.Iteration)
   def setup(): Unit = {
     keys = Array.tabulate(size)(i => s"key$i")
     map = ArrayMap[String, Int](size)
     var i = 0
     while (i < size) { map.put(keys(i), i); i += 1 }
   }
+}
 
-  @Benchmark
-  def putNew(): Int = map.put(s"key$size", size)
+// Mutating benchmarks (put/remove/clear) need a fresh map before every invocation.
+@State(Scope.Thread)
+class ArrayMapWriteState {
 
-  @Benchmark
-  def putExisting(): Int = map.put(keys(size / 2), 999)
+  @Param(Array("100", "1000"))
+  var size: Int = uninitialized
 
-  @Benchmark
-  def getHit(): Nullable[Int] = map.get(keys(size / 2))
+  var keys: Array[String]         = uninitialized
+  var map:  ArrayMap[String, Int] = uninitialized
 
-  @Benchmark
-  def getMiss(): Nullable[Int] = map.get("missing")
-
-  @Benchmark
-  def containsKeyHit(): Boolean = map.containsKey(keys(size / 2))
-
-  @Benchmark
-  def containsKeyMiss(): Boolean = map.containsKey("missing")
-
-  @Benchmark
-  def removeKey(): Nullable[Int] = map.removeKey(keys(size / 2))
-
-  @Benchmark
-  def foreachEntry(): Int = {
-    var sum = 0
-    map.foreachEntry((_, v) => sum += v)
-    sum
-  }
-
-  @Benchmark
-  def clearAndRefill(): Unit = {
-    map.clear()
+  @Setup(Level.Invocation)
+  def setup(): Unit = {
+    keys = Array.tabulate(size)(i => s"key$i")
+    map = ArrayMap[String, Int](size)
     var i = 0
     while (i < size) { map.put(keys(i), i); i += 1 }
   }

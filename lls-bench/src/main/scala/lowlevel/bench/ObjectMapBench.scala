@@ -14,13 +14,117 @@ import java.util.concurrent.TimeUnit
 @State(Scope.Thread)
 class ObjectMapBench {
 
+  @Benchmark
+  def putNew(s: ObjectMapWriteState): Nullable[java.lang.Integer] =
+    s.map.put(s"key${s.nextKey}", Nullable(s.nextKey: java.lang.Integer))
+
+  @Benchmark
+  def putExisting(s: ObjectMapWriteState): Nullable[java.lang.Integer] =
+    s.map.put(s.keys(s.size / 2), Nullable(999: java.lang.Integer))
+
+  @Benchmark
+  def putIntNew(s: ObjectMapWriteState): Nullable[java.lang.Integer] =
+    s.intMap.put(s.nextKey: java.lang.Integer, Nullable((s.nextKey * 10): java.lang.Integer))
+
+  @Benchmark
+  def putIntExisting(s: ObjectMapWriteState): Nullable[java.lang.Integer] =
+    s.intMap.put((s.size / 2): java.lang.Integer, Nullable(999: java.lang.Integer))
+
+  @Benchmark
+  def getHit(s: ObjectMapReadState): Nullable[java.lang.Integer] = s.map.get(s.keys(s.size / 2))
+
+  @Benchmark
+  def getMiss(s: ObjectMapReadState): Nullable[java.lang.Integer] = s.map.get("missing")
+
+  @Benchmark
+  def getIntHit(s: ObjectMapReadState): Nullable[java.lang.Integer] = s.intMap.get((s.size / 2): java.lang.Integer)
+
+  @Benchmark
+  def getIntMiss(s: ObjectMapReadState): Nullable[java.lang.Integer] = s.intMap.get(-1: java.lang.Integer)
+
+  @Benchmark
+  def getWithDefault(s: ObjectMapReadState): java.lang.Integer = s.map.get("missing", Nullable(-1: java.lang.Integer)).nn
+
+  @Benchmark
+  def containsKeyHit(s: ObjectMapReadState): Boolean = s.map.containsKey(s.keys(s.size / 2))
+
+  @Benchmark
+  def containsKeyMiss(s: ObjectMapReadState): Boolean = s.map.containsKey("missing")
+
+  @Benchmark
+  def removeHit(s: ObjectMapWriteState): Nullable[java.lang.Integer] = s.map.remove(s.keys(s.size / 2))
+
+  // A miss returns from `ObjectMap#remove` right after `locateKey`, which only reads the table:
+  // no slot is written, no size changes. Read-only, verified against the generated source.
+  @Benchmark
+  def removeMiss(s: ObjectMapReadState): Nullable[java.lang.Integer] = s.map.remove("missing")
+
+  @Benchmark
+  def foreachEntry(s: ObjectMapReadState): Int = {
+    var sum = 0
+    s.map.foreachEntry((_, v) => sum += v.nn.intValue)
+    sum
+  }
+
+  @Benchmark
+  def foreachKey(s: ObjectMapReadState): Int = {
+    var sum = 0
+    s.map.foreachKey(k => sum += k.length)
+    sum
+  }
+
+  @Benchmark
+  def clearAndRefill(s: ObjectMapWriteState): Unit = {
+    s.map.clear()
+    var i = 0
+    while (i < s.size) { s.map.put(s.keys(i), Nullable(i: java.lang.Integer)); i += 1 }
+  }
+
+  // The destination map is freshly created inside the benchmark body; the shared `map` is only
+  // read via `putAll`, so this can share the read-only state.
+  @Benchmark
+  def putAllFromCopy(s: ObjectMapReadState): Unit = {
+    val dest = ObjectMap[String, java.lang.Integer](s.size)
+    dest.putAll(s.map)
+  }
+}
+
+// Read-only benchmarks (get/contains/foreach/putAll-as-source/miss-remove) do not modify the maps,
+// so they are built once per iteration rather than before every invocation.
+@State(Scope.Thread)
+class ObjectMapReadState {
+
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var keys:    Array[String]                                   = uninitialized
-  private var map:     ObjectMap[String, java.lang.Integer]            = uninitialized
-  private var intMap:  ObjectMap[java.lang.Integer, java.lang.Integer] = uninitialized
-  private var nextKey: Int                                             = uninitialized
+  var keys:   Array[String]                                   = uninitialized
+  var map:    ObjectMap[String, java.lang.Integer]            = uninitialized
+  var intMap: ObjectMap[java.lang.Integer, java.lang.Integer] = uninitialized
+
+  @Setup(Level.Iteration)
+  def setup(): Unit = {
+    keys = Array.tabulate(size)(i => s"key$i")
+    map = ObjectMap[String, java.lang.Integer](size)
+    var i = 0
+    while (i < size) { map.put(keys(i), Nullable(i: java.lang.Integer)); i += 1 }
+
+    intMap = ObjectMap[java.lang.Integer, java.lang.Integer](size)
+    i = 0
+    while (i < size) { intMap.put(i: java.lang.Integer, Nullable((i * 10): java.lang.Integer)); i += 1 }
+  }
+}
+
+// Mutating benchmarks (put/hit-remove/clear) need a fresh map before every invocation.
+@State(Scope.Thread)
+class ObjectMapWriteState {
+
+  @Param(Array("100", "10000"))
+  var size: Int = uninitialized
+
+  var keys:    Array[String]                                   = uninitialized
+  var map:     ObjectMap[String, java.lang.Integer]            = uninitialized
+  var intMap:  ObjectMap[java.lang.Integer, java.lang.Integer] = uninitialized
+  var nextKey: Int                                             = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {
@@ -34,71 +138,5 @@ class ObjectMapBench {
     while (i < size) { intMap.put(i: java.lang.Integer, Nullable((i * 10): java.lang.Integer)); i += 1 }
 
     nextKey = size
-  }
-
-  @Benchmark
-  def putNew(): Nullable[java.lang.Integer] = map.put(s"key$nextKey", Nullable(nextKey: java.lang.Integer))
-
-  @Benchmark
-  def putExisting(): Nullable[java.lang.Integer] = map.put(keys(size / 2), Nullable(999: java.lang.Integer))
-
-  @Benchmark
-  def putIntNew(): Nullable[java.lang.Integer] = intMap.put(nextKey: java.lang.Integer, Nullable((nextKey * 10): java.lang.Integer))
-
-  @Benchmark
-  def putIntExisting(): Nullable[java.lang.Integer] = intMap.put((size / 2): java.lang.Integer, Nullable(999: java.lang.Integer))
-
-  @Benchmark
-  def getHit(): Nullable[java.lang.Integer] = map.get(keys(size / 2))
-
-  @Benchmark
-  def getMiss(): Nullable[java.lang.Integer] = map.get("missing")
-
-  @Benchmark
-  def getIntHit(): Nullable[java.lang.Integer] = intMap.get((size / 2): java.lang.Integer)
-
-  @Benchmark
-  def getIntMiss(): Nullable[java.lang.Integer] = intMap.get(-1: java.lang.Integer)
-
-  @Benchmark
-  def getWithDefault(): java.lang.Integer = map.get("missing", Nullable(-1: java.lang.Integer)).nn
-
-  @Benchmark
-  def containsKeyHit(): Boolean = map.containsKey(keys(size / 2))
-
-  @Benchmark
-  def containsKeyMiss(): Boolean = map.containsKey("missing")
-
-  @Benchmark
-  def removeHit(): Nullable[java.lang.Integer] = map.remove(keys(size / 2))
-
-  @Benchmark
-  def removeMiss(): Nullable[java.lang.Integer] = map.remove("missing")
-
-  @Benchmark
-  def foreachEntry(): Int = {
-    var sum = 0
-    map.foreachEntry((_, v) => sum += v.nn.intValue)
-    sum
-  }
-
-  @Benchmark
-  def foreachKey(): Int = {
-    var sum = 0
-    map.foreachKey(k => sum += k.length)
-    sum
-  }
-
-  @Benchmark
-  def clearAndRefill(): Unit = {
-    map.clear()
-    var i = 0
-    while (i < size) { map.put(keys(i), Nullable(i: java.lang.Integer)); i += 1 }
-  }
-
-  @Benchmark
-  def putAllFromCopy(): Unit = {
-    val dest = ObjectMap[String, java.lang.Integer](size)
-    dest.putAll(map)
   }
 }

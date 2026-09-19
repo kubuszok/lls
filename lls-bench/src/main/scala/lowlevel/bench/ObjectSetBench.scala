@@ -14,14 +14,70 @@ import java.util.concurrent.TimeUnit
 @State(Scope.Thread)
 class ObjectSetBench {
 
+  // --- Add ---
+
+  @Benchmark
+  def addNew(s: ObjectSetWriteState): Boolean = s.set.add(s"key${s.size}")
+
+  @Benchmark
+  def addExisting(s: ObjectSetWriteState): Boolean = s.set.add(s.keys(s.size / 2))
+
+  // --- Contains ---
+
+  @Benchmark
+  def containsHit(s: ObjectSetReadState): Boolean = s.set.contains(s.keys(s.size / 2))
+
+  @Benchmark
+  def containsMiss(s: ObjectSetReadState): Boolean = s.set.contains("missing")
+
+  @Benchmark
+  def containsIntHit(s: ObjectSetReadState): Boolean = s.intSet.contains(s.size / 2)
+
+  @Benchmark
+  def containsIntMiss(s: ObjectSetReadState): Boolean = s.intSet.contains(-1)
+
+  // --- Remove ---
+
+  @Benchmark
+  def removeHit(s: ObjectSetWriteState): Boolean = s.set.remove(s.keys(s.size / 2))
+
+  // A miss returns from `ObjectSet#remove` right after `locateKey`, which only reads the table:
+  // no slot is written, no size changes. Read-only, verified against the generated source.
+  @Benchmark
+  def removeMiss(s: ObjectSetReadState): Boolean = s.set.remove("missing")
+
+  // --- Iteration ---
+
+  @Benchmark
+  def foreachAll(s: ObjectSetReadState): Int = {
+    var sum = 0
+    s.set.foreach(k => sum += k.length)
+    sum
+  }
+
+  // --- Bulk ---
+
+  @Benchmark
+  def clearAndRefill(s: ObjectSetWriteState): Unit = {
+    s.set.clear()
+    var i = 0
+    while (i < s.size) { s.set.add(s.keys(i)); i += 1 }
+  }
+}
+
+// Read-only benchmarks (contains/foreach/miss-remove) do not modify the sets, so they are built
+// once per iteration rather than before every invocation.
+@State(Scope.Thread)
+class ObjectSetReadState {
+
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var keys:   Array[String]                = uninitialized
-  private var set:    ObjectSet[String]            = uninitialized
-  private var intSet: ObjectSet[java.lang.Integer] = uninitialized
+  var keys:   Array[String]                = uninitialized
+  var set:    ObjectSet[String]            = uninitialized
+  var intSet: ObjectSet[java.lang.Integer] = uninitialized
 
-  @Setup(Level.Invocation)
+  @Setup(Level.Iteration)
   def setup(): Unit = {
     keys = Array.tabulate(size)(i => s"key$i")
     set = ObjectSet[String](size)
@@ -32,51 +88,22 @@ class ObjectSetBench {
     i = 0
     while (i < size) { intSet.add(i); i += 1 }
   }
+}
 
-  // --- Add ---
+// Mutating benchmarks (add/hit-remove/clear) need a fresh set before every invocation.
+@State(Scope.Thread)
+class ObjectSetWriteState {
 
-  @Benchmark
-  def addNew(): Boolean = set.add(s"key$size")
+  @Param(Array("100", "10000"))
+  var size: Int = uninitialized
 
-  @Benchmark
-  def addExisting(): Boolean = set.add(keys(size / 2))
+  var keys: Array[String]     = uninitialized
+  var set:  ObjectSet[String] = uninitialized
 
-  // --- Contains ---
-
-  @Benchmark
-  def containsHit(): Boolean = set.contains(keys(size / 2))
-
-  @Benchmark
-  def containsMiss(): Boolean = set.contains("missing")
-
-  @Benchmark
-  def containsIntHit(): Boolean = intSet.contains(size / 2)
-
-  @Benchmark
-  def containsIntMiss(): Boolean = intSet.contains(-1)
-
-  // --- Remove ---
-
-  @Benchmark
-  def removeHit(): Boolean = set.remove(keys(size / 2))
-
-  @Benchmark
-  def removeMiss(): Boolean = set.remove("missing")
-
-  // --- Iteration ---
-
-  @Benchmark
-  def foreachAll(): Int = {
-    var sum = 0
-    set.foreach(k => sum += k.length)
-    sum
-  }
-
-  // --- Bulk ---
-
-  @Benchmark
-  def clearAndRefill(): Unit = {
-    set.clear()
+  @Setup(Level.Invocation)
+  def setup(): Unit = {
+    keys = Array.tabulate(size)(i => s"key$i")
+    set = ObjectSet[String](size)
     var i = 0
     while (i < size) { set.add(keys(i)); i += 1 }
   }

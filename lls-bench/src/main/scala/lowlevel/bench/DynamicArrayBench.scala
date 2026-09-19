@@ -14,11 +14,121 @@ import java.util.concurrent.TimeUnit
 @State(Scope.Thread)
 class DynamicArrayBench {
 
+  // --- Add ---
+
+  @Benchmark
+  def addInt(s: DynamicArrayWriteState): Unit = s.intArray.add(42)
+
+  @Benchmark
+  def addString(s: DynamicArrayWriteState): Unit = s.stringArray.add("hello")
+
+  // --- Access ---
+
+  @Benchmark
+  def getInt(s: DynamicArrayReadState): Int = s.intArray(s.size / 2)
+
+  @Benchmark
+  def getString(s: DynamicArrayReadState): String = s.stringArray(s.size / 2)
+
+  // --- Contains ---
+
+  @Benchmark
+  def containsIntHit(s: DynamicArrayReadState): Boolean = s.intArray.contains(s.size / 2)
+
+  @Benchmark
+  def containsIntMiss(s: DynamicArrayReadState): Boolean = s.intArray.contains(-1)
+
+  @Benchmark
+  def containsStringHit(s: DynamicArrayReadState): Boolean = s.stringArray.contains(s"v${s.size / 2}")
+
+  @Benchmark
+  def containsStringMiss(s: DynamicArrayReadState): Boolean = s.stringArray.contains("missing")
+
+  // --- IndexOf ---
+
+  @Benchmark
+  def indexOfIntFirst(s: DynamicArrayReadState): Int = s.intArray.indexOf(0)
+
+  @Benchmark
+  def indexOfIntLast(s: DynamicArrayReadState): Int = s.intArray.indexOf(s.size - 1)
+
+  // --- Remove ---
+
+  @Benchmark
+  def removeIndexFirst(s: DynamicArrayWriteState): Int = s.intArray.removeIndex(0)
+
+  @Benchmark
+  def removeIndexLast(s: DynamicArrayWriteState): Int = s.intArray.removeIndex(s.intArray.size - 1)
+
+  @Benchmark
+  def removeValueInt(s: DynamicArrayWriteState): Boolean = s.intArray.removeValue(s.size / 2)
+
+  // --- Iteration ---
+
+  @Benchmark
+  def foreachInt(s: DynamicArrayReadState): Int = {
+    var sum = 0
+    s.intArray.foreach(sum += _)
+    sum
+  }
+
+  @Benchmark
+  def foreachString(s: DynamicArrayReadState): Int = {
+    var sum = 0
+    s.stringArray.foreach(str => sum += str.length)
+    sum
+  }
+
+  // --- Sort ---
+
+  @Benchmark
+  def sortInt(s: DynamicArrayWriteState): Unit = s.intArray.sort()
+
+  // --- Bulk ---
+
+  @Benchmark
+  def clearAndRefill(s: DynamicArrayWriteState): Unit = {
+    s.intArray.clear()
+    var i = 0
+    while (i < s.size) { s.intArray.add(i); i += 1 }
+  }
+
+  @Benchmark
+  def toArray(s: DynamicArrayReadState): Array[Int] = s.intArray.toArray()
+}
+
+// Read-only benchmarks (get/contains/indexOf/foreach/toArray) do not modify the array, so it is
+// built once per iteration rather than before every invocation.
+@State(Scope.Thread)
+class DynamicArrayReadState {
+
   @Param(Array("100", "10000"))
   var size: Int = uninitialized
 
-  private var intArray:    DynamicArray[Int]    = uninitialized
-  private var stringArray: DynamicArray[String] = uninitialized
+  var intArray:    DynamicArray[Int]    = uninitialized
+  var stringArray: DynamicArray[String] = uninitialized
+
+  @Setup(Level.Iteration)
+  def setup(): Unit = {
+    intArray = DynamicArray[Int](size)
+    var i = 0
+    while (i < size) { intArray.add(i); i += 1 }
+
+    stringArray = DynamicArray[String](size)
+    i = 0
+    while (i < size) { stringArray.add(s"v$i"); i += 1 }
+  }
+}
+
+// Mutating benchmarks (add/remove/sort/clear) need a fresh array before every invocation.
+@State(Scope.Thread)
+class DynamicArrayWriteState {
+
+  @Param(Array("100", "10000"))
+  var size: Int = uninitialized
+
+  var intArray:    DynamicArray[Int]    = uninitialized
+  var stringArray: DynamicArray[String] = uninitialized
 
   @Setup(Level.Invocation)
   def setup(): Unit = {
@@ -30,86 +140,4 @@ class DynamicArrayBench {
     i = 0
     while (i < size) { stringArray.add(s"v$i"); i += 1 }
   }
-
-  // --- Add ---
-
-  @Benchmark
-  def addInt(): Unit = intArray.add(42)
-
-  @Benchmark
-  def addString(): Unit = stringArray.add("hello")
-
-  // --- Access ---
-
-  @Benchmark
-  def getInt(): Int = intArray(size / 2)
-
-  @Benchmark
-  def getString(): String = stringArray(size / 2)
-
-  // --- Contains ---
-
-  @Benchmark
-  def containsIntHit(): Boolean = intArray.contains(size / 2)
-
-  @Benchmark
-  def containsIntMiss(): Boolean = intArray.contains(-1)
-
-  @Benchmark
-  def containsStringHit(): Boolean = stringArray.contains(s"v${size / 2}")
-
-  @Benchmark
-  def containsStringMiss(): Boolean = stringArray.contains("missing")
-
-  // --- IndexOf ---
-
-  @Benchmark
-  def indexOfIntFirst(): Int = intArray.indexOf(0)
-
-  @Benchmark
-  def indexOfIntLast(): Int = intArray.indexOf(size - 1)
-
-  // --- Remove ---
-
-  @Benchmark
-  def removeIndexFirst(): Int = intArray.removeIndex(0)
-
-  @Benchmark
-  def removeIndexLast(): Int = intArray.removeIndex(intArray.size - 1)
-
-  @Benchmark
-  def removeValueInt(): Boolean = intArray.removeValue(size / 2)
-
-  // --- Iteration ---
-
-  @Benchmark
-  def foreachInt(): Int = {
-    var sum = 0
-    intArray.foreach(sum += _)
-    sum
-  }
-
-  @Benchmark
-  def foreachString(): Int = {
-    var sum = 0
-    stringArray.foreach(s => sum += s.length)
-    sum
-  }
-
-  // --- Sort ---
-
-  @Benchmark
-  def sortInt(): Unit = intArray.sort()
-
-  // --- Bulk ---
-
-  @Benchmark
-  def clearAndRefill(): Unit = {
-    intArray.clear()
-    var i = 0
-    while (i < size) { intArray.add(i); i += 1 }
-  }
-
-  @Benchmark
-  def toArray(): Array[Int] = intArray.toArray()
 }
