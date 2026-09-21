@@ -10,6 +10,7 @@ array views, `Nullable`, `Eval`/`Resource`. sge and ssg depend on it, so its pub
 | `lls/src/main/scala` | hand-written code (`ArrayView`, `MkArray`, `Nullable`, `Eval`, glue) |
 | `target/balticporter-lls/src_managed/main/scala` | GENERATED collections — never edited, never committed |
 | `lls/src/test/scala`, `lls/src/test/scalajvm` | tests (all platforms / JVM-only, e.g. the bytecode checks) |
+| `lls-port` | how the generated collections are ported (the Baltic Porter policy); JVM only, published |
 | `lls-io` | I/O utilities |
 | `lls-bench` | JMH suites and the recorded `baseline.txt` |
 | `original-src/libgdx` | upstream Java, a submodule — the generator's input |
@@ -20,14 +21,21 @@ array views, `Nullable`, `Eval`/`Resource`. sge and ssg depend on it, so its pub
 The collections are ported mechanically from libGDX's Java by
 [Baltic Porter](https://github.com/kubuszok/balticporter): a `sourceGenerator` in `build.sbt` calls
 `project/BalticPorterGen.scala`, which runs the engine inside sbt and writes to
-`target/balticporter-lls/`. The engine is the snapshot pinned in `project/plugins.sbt`, resolved
-from Maven Central's snapshot repository; no engine checkout is needed
-(`-Dbalticporter.root=<checkout>` reads the policy's files from one instead).
+`target/balticporter-lls/`. The engine (`balticporter-engine`) is the snapshot pinned in
+`project/plugins.sbt`, resolved from Maven Central's snapshot repository; no engine checkout is needed.
+
+**How lls is ported is decided here, in `lls-port/src/main/scala/lowlevel/port/`** (which files,
+drops, renames, added members, replacement bodies). That one directory is compiled twice: into the
+meta-build (`project/build.sbt`), where the generator calls it, and as the published JVM module
+`lls-port`, which sge pins beside the lls version to extend the same policy.
 
 - **Never edit a generated file, and never patch a hand-written file to fit a generated defect.**
-  The fix belongs in Baltic Porter's lls policy; then bump the pin here.
+  A wrong decision is fixed in `lls-port/`; a wrong mechanism is fixed in Baltic Porter, then the
+  pin is bumped here.
+- After editing `lls-port/`, `reload` (the generator refuses to run a policy older than the one on
+  disk); the next compile regenerates.
 - The generated tree is reused while `target/balticporter-lls/.generated-marker` matches the engine
-  pin, the libGDX commit, the generator source and the JDK major. Force with
+  pin, the libGDX commit, the generator source, the `lls-port` sources and the JDK major. Force with
   `-Dbalticporter.forceRegen=true`; `sbt --client generatePort` runs the generation alone.
 - Bump the pin only to a hash whose `.pom` is already on the snapshot repository.
 - The procedures (tracing a generated defect to its rule, bumping the pin, sbt 2, CI caching) are
