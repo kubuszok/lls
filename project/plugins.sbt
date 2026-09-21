@@ -4,6 +4,9 @@ addSbtPlugin("com.kubuszok" % "sbt-kubuszok" % "0.2.3")
 // benchmarks
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 
-// Baltic Porter: Java->Scala 3 porting engine, runs as a sourceGenerator
+// Baltic Porter: Java->Scala 3 porting engine, runs as a sourceGenerator. The policy it runs with is
+// lls's own (lls-port/, compiled into this meta-build by project/build.sbt). The `lls-port` module in
+// build.sbt reads this same pin.
 resolvers += "Central Portal Snapshots" at "https://central.sonatype.com/repository/maven-snapshots"
-libraryDependencies += "com.kubuszok" %% "balticporter-corpus" % "971be58b2103c8ba65039a343ce091a0d7c424d2-SNAPSHOT"
+// SCRATCH ONLY: this engine build is in ~/.ivy2/local, not on the snapshot repository yet
+libraryDependencies += "com.kubuszok" %% "balticporter-engine" % "ef590071441380e946ed1e704a160e1a396eb73b-SNAPSHOT"

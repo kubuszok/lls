@@ -6,6 +6,7 @@
 ## sbt
 project/*
 !project/plugins.sbt
+!project/build.sbt
 !project/build.properties
 !project/LlsSettings.scala
 !project/BalticPorterGen.scala

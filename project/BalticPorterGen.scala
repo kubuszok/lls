@@ -7,7 +7,8 @@ import java.nio.file.{ Files, Path }
   *
   * Requires:
   *   - libGDX sources at `original-src/libgdx/gdx/src` (git submodule)
-  *   - the `balticporter-corpus` artifact pinned in `project/plugins.sbt` (it carries the files the policy injects; no engine checkout is needed)
+  *   - the `balticporter-engine` artifact pinned in `project/plugins.sbt`
+  *   - lls's porting policy, `lls-port/src/main/scala` (compiled into this meta-build by `project/build.sbt`)
   *   - `cs` (coursier) on the PATH, to resolve the classpath libGDX's own sources are read against
   */
 object BalticPorterGen {
@@ -39,22 +40,13 @@ object BalticPorterGen {
       )
 
     if (!cached) {
+      // sbt does not reload the build when lls-port/ changes; never generate with a policy older than the one on disk
+      if (policyOnDisk(llsRoot) != LlsPortCompiled.digest)
+        sys.error("[Baltic Porter] lls-port/src/main/scala changed after this build was loaded: run `reload`, then the command again.")
       val commit = balticporter.runner.VendoredCommit.of(libgdxSrc)
       log.info(s"[Baltic Porter] Generating lls sources from libGDX ($commit)")
 
-      // The files the port's policy injects by path ship inside the published corpus jar and are
-      // unpacked under target/; -Dbalticporter.root=<engine checkout> reads them from a checkout
-      // instead (engine development only).
-      val bpRoot = sys.props.get("balticporter.root") match {
-        case Some(root) => Path.of(root).toAbsolutePath.normalize
-        case None       => balticporter.corpus.BundledCorpus.root(llsRoot.resolve("target/balticporter-engine"))
-      }
-
-      val rungs = balticporter.corpus.lls.LlsPolicy.DefaultRungs
-      // Disable parity check: the hand-ported files are being replaced by these generated ones.
-      // Remove inject: Collections.scala lives in lls's hand-written source tree (brace syntax
-      // for -no-indent); the porter's inject would duplicate it with indentation syntax.
-      val manifest = balticporter.corpus.lls.LlsPolicy.core(bpRoot, rungs).copy(parity = None, inject = Nil)
+      val manifest = lowlevel.port.LlsPolicy.core(lowlevel.port.LlsPolicy.DefaultRungs)
 
       val result = balticporter.runner
         .PortRun(
@@ -63,8 +55,8 @@ object BalticPorterGen {
           sourceSet = balticporter.runner.SourceSet.Main,
           frontend = balticporter.core.FrontendConfig(
             libgdxSrc,
-            balticporter.corpus.lls.LlsMigrate.Files,
-            balticporter.corpus.GdxCoreClasspath.entries(bpRoot),
+            lowlevel.port.LlsMigrate.Files,
+            lowlevel.port.GdxCoreClasspath.entries(llsRoot.resolve("target/balticporter-classpath")),
             resolutionRoots = Nil
           ),
           phases = Nil,
@@ -94,8 +86,34 @@ object BalticPorterGen {
     collectScalaFiles(outDir)
   }
 
+  /** The engine version pinned in `project/plugins.sbt` — the one place it is written; the `lls-port` module depends on the same one. */
+  def enginePin(llsRoot: Path): String =
+    """balticporter-engine" % "([^"]+)"""".r
+      .findFirstMatchIn(Files.readString(llsRoot.resolve("project/plugins.sbt")))
+      .map(_.group(1))
+      .getOrElse(sys.error("[Baltic Porter] project/plugins.sbt pins no balticporter-engine version"))
+
+  /** The policy sources as they are on disk now, digested the way `project/build.sbt` digested them when it compiled them into this build. */
+  private def policyOnDisk(llsRoot: Path): String = {
+    val root  = llsRoot.resolve("lls-port/src/main/scala").toFile.getCanonicalFile
+    val files = (root ** "*.scala").get().sortBy(_.getPath)
+    sbt.io.Hash.toHex(sbt.io.Hash(files.map(f => sbt.io.Hash.toHex(sbt.io.Hash(f))).mkString))
+  }
+
+  /** One hash over the given files' relative paths and contents (line endings normalised, so every OS agrees), in path order. */
+  private def sourceHash(root: Path, files: Seq[Path]): String = {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    files.sortBy(f => root.relativize(f).toString.replace('\\', '/')).foreach { f =>
+      digest.update(root.relativize(f).toString.replace('\\', '/').getBytes("UTF-8"))
+      digest.update(0.toByte)
+      digest.update(Files.readString(f).replace("\r", "").getBytes("UTF-8"))
+      digest.update(0.toByte)
+    }
+    digest.digest().take(8).map(b => f"$b%02x").mkString
+  }
+
   /** What the generated tree depends on, as one line, readable on a shallow checkout WITHOUT the submodule's files: the engine artifact pinned in `project/plugins.sbt`, the libGDX commit (the
-    * submodule's HEAD when it is initialised, else the commit this checkout records for it), this generator (line endings normalised, so every OS agrees) and the JDK feature version.
+    * submodule's HEAD when it is initialised, else the commit this checkout records for it), this generator, the porting policy under `lls-port/src/main/scala` and the JDK feature version.
     */
   def fingerprint(llsRoot: Path): String = {
     def git(dir: Path, args: String*): Option[String] = {
@@ -106,20 +124,17 @@ object BalticPorterGen {
       val out = new String(p.getInputStream.readAllBytes()).trim
       if (p.waitFor() == 0 && out.nonEmpty) Some(out) else None
     }
-    val pin = """balticporter-corpus" % "([^"]+)"""".r
-      .findFirstMatchIn(Files.readString(llsRoot.resolve("project/plugins.sbt")))
-      .map(_.group(1))
-      .getOrElse(sys.error("[Baltic Porter] project/plugins.sbt pins no balticporter-corpus version"))
+    val pin       = enginePin(llsRoot)
     val submodule = llsRoot.resolve("original-src/libgdx")
     val libgdx    = (if (Files.exists(submodule.resolve(".git"))) git(submodule, "rev-parse", "HEAD") else None)
       .orElse(git(llsRoot, "ls-tree", "HEAD", "original-src/libgdx").flatMap(_.split("\\s+").lift(2)))
       .getOrElse(
         sys.error("[Baltic Porter] cannot read the libGDX commit this checkout records (git ls-tree HEAD original-src/libgdx)")
       )
-    val source    = Files.readString(llsRoot.resolve("project/BalticPorterGen.scala")).replace("\r", "")
-    val generator = java.security.MessageDigest.getInstance("SHA-256").digest(source.getBytes("UTF-8")).take(8).map(b => f"$b%02x").mkString
+    val generator = sourceHash(llsRoot, Seq(llsRoot.resolve("project/BalticPorterGen.scala")))
+    val policy    = sourceHash(llsRoot, collectScalaFiles(llsRoot.resolve("lls-port/src/main/scala")).map(_.toPath))
     // the JDK the generator runs on decides what a member overrides
-    s"engine=$pin libgdx=$libgdx generator=$generator jdk=${java.lang.Runtime.version().feature()}"
+    s"engine=$pin libgdx=$libgdx generator=$generator policy=$policy jdk=${java.lang.Runtime.version().feature()}"
   }
 
   private def collectScalaFiles(dir: Path): Seq[File] = {
