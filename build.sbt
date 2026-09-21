@@ -30,7 +30,7 @@ val dev = new DevProperties(
 
 lazy val al = new Aliases(
   published = Seq(lls, `lls-io`),
-  compileOnly = Seq(`lls-bench`)
+  compileOnly = Seq(`lls-bench`, `lls-port`)
 )
 
 // CI/test command aliases (e.g. ci-jvm-3, test-js-3, test-native-3), consumed by .github/workflows/ci.yml.
@@ -208,7 +208,25 @@ lazy val `lls-io` = (projectMatrix in file("lls-io"))
   .settings(publishSettings)
   .settings(mimaSettings)
 
-lazy val `lls-bench` = (projectMatrix in file("lls-bench"))
+// How lls is ported: the policy Baltic Porter runs with. The generator above reads it from the
+// meta-build (project/build.sbt compiles this same directory); it is PUBLISHED so that a port of the
+// rest of libGDX (sge) extends lls's policy by depending on it, pinned beside the lls version.
+// JVM only: it runs inside a build. No -no-indent/-Werror: the meta-build compiles the same sources
+// with its own options. It has no tests, so the ci aliases only compile it.
+lazy val `lls-port` = (projectMatrix in file("lls-port"))
+  .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
+  .someVariations(scalas, List(VirtualAxis.jvm))(dev.only1VersionInIDE *)
+  .settings(
+    name := "lls-port",
+    description := "Low Level Scala — the Baltic Porter policy lls is ported from libGDX with",
+    libraryDependencies += "com.kubuszok" %% "balticporter-engine" % BalticPorterGen.enginePin((ThisBuild / baseDirectory).value.toPath),
+    resolvers += "Central Portal Snapshots" at "https://central.sonatype.com/repository/maven-snapshots",
+    coverageEnabled := false
+  )
+  .settings(publishSettings)
+  .settings(mimaSettings)
+
+lazy val `lls-bench` =(projectMatrix in file("lls-bench"))
   .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
   .enablePlugins(JmhPlugin)
   .someVariations(scalas, List(VirtualAxis.jvm))((commonSettings ++ dev.only1VersionInIDE) *)
@@ -228,6 +246,7 @@ lazy val root = (project in file("."))
   .aggregate(lls.projectRefs *)
   .aggregate(`lls-io`.projectRefs *)
   .aggregate(`lls-bench`.projectRefs *)
+  .aggregate(`lls-port`.projectRefs *)
   .settings(
     name := "lls-build",
     description := "Build setup for Low Level Scala"
