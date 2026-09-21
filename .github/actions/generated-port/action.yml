@@ -21,10 +21,12 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: kubuszok/balticporter/.github/actions/generated-port@8d0cf549f1e8a501c772975301013f3b3b0af19f
+    - uses: kubuszok/balticporter/.github/actions/generated-port@55be328a2265f34c8d41d30634569229539cf562
       id: port
       with:
         mode: ${{ inputs.mode }}
         key: ${{ inputs.key }}
         path: target/balticporter-lls
         submodule: original-src/libgdx
+        # how lls is ported is lls's own (lls-port/): a change to it must regenerate
+        key-extra: ${{ hashFiles('lls-port/src/main/scala/**') }}
