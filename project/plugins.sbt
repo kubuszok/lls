@@ -8,4 +8,4 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // lls's own (lls-port/, compiled into this meta-build by project/build.sbt). The `lls-port` module in
 // build.sbt reads this same pin.
 resolvers += "Central Portal Snapshots" at "https://central.sonatype.com/repository/maven-snapshots"
-libraryDependencies += "com.kubuszok" %% "balticporter-engine" % "8a6c5937e051c33b0f6e5a2c04b67ab1108e87c1-SNAPSHOT"
+libraryDependencies += "com.kubuszok" %% "balticporter-engine" % "ca78e90e01668f0a6a37ef65b427f54ca45b4a7f-SNAPSHOT"
