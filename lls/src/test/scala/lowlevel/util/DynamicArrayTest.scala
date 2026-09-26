@@ -33,7 +33,7 @@ class DynamicArrayTest extends munit.FunSuite {
   // NOTE: Machine-ported DynamicArray.`with` always copies the array (no zero-copy wrap).
   test("with plain array creates copy with same elements") {
     val raw = Array(10, 20, 30)
-    val arr = DynamicArray.`with`(raw)
+    val arr = DynamicArray.`with`(raw*)
     assertEquals(arr.size, 3)
     assertEquals(arr(0), 10)
     assertEquals(arr(1), 20)
@@ -99,7 +99,7 @@ class DynamicArrayTest extends munit.FunSuite {
 
   test("addAll from plain array") {
     val arr = DynamicArray[Int]()
-    arr.addAll(Array(10, 20, 30))
+    arr.addAll(Array(10, 20, 30)*)
     assertEquals(arr.size, 3)
     assertEquals(arr(0), 10)
     assertEquals(arr(1), 20)
