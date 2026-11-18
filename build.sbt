@@ -35,8 +35,8 @@ val dev = new DevProperties(
 // and forces a regeneration (on CI it throws away the tree the `generate` job produced). A CI runner
 // starts from an empty target/, so the step buys nothing there; locally run `clean` yourself.
 lazy val al = new Aliases(
-  published = Seq(lls, `lls-io`),
-  compileOnly = Seq(`lls-bench`, `lls-port`)
+  published = Seq(lls, `lls-io`, `lls-port`),
+  compileOnly = Seq(`lls-bench`)
 ) {
   override def ci(platform: String, scalaBinary: String): String =
     super.ci(platform, scalaBinary).split(";").map(_.trim).filterNot(_ == "clean").mkString(" ; ")
@@ -186,7 +186,7 @@ lazy val `lls-io` = (projectMatrix in file("lls-io"))
 // meta-build (project/build.sbt compiles this same directory); it is PUBLISHED so that a port of the
 // rest of libGDX (sge) extends lls's policy by depending on it, pinned beside the lls version.
 // JVM only: it runs inside a build. No -no-indent/-Werror: the meta-build compiles the same sources
-// with its own options. It has no tests, so the ci aliases only compile it.
+// with its own options. It has no tests; the ci aliases compile it and build its Scaladoc, as ci-release does.
 lazy val `lls-port` = (projectMatrix in file("lls-port"))
   .defaultAxes(VirtualAxis.jvm, VirtualAxis.scalaABIVersion(scala3))
   .someVariations(scalas, List(VirtualAxis.jvm))(dev.only1VersionInIDE *)
@@ -194,7 +194,6 @@ lazy val `lls-port` = (projectMatrix in file("lls-port"))
     name := "lls-port",
     description := "Low Level Scala — the Baltic Porter policy lls is ported from libGDX with",
     libraryDependencies += "com.kubuszok" %% "balticporter-engine" % BalticPorterGen.enginePin((ThisBuild / baseDirectory).value.toPath),
-    resolvers += "Central Portal Snapshots" at "https://central.sonatype.com/repository/maven-snapshots",
     coverageEnabled := false
   )
   .settings(publishSettings)
