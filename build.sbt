@@ -28,52 +28,26 @@ val dev = new DevProperties(
   platforms = platforms
 )
 
-lazy val al = new Aliases(
-  published = Seq(lls, `lls-io`),
-  compileOnly = Seq(`lls-bench`, `lls-port`)
-)
-
-// CI/test command aliases (e.g. ci-jvm-3, test-js-3, test-native-3), consumed by .github/workflows/ci.yml.
-// sbt-welcome used to register these via `usefulTasks`, but it has no sbt 2.0 build, so we register
-// them directly from the Aliases helper bundled with sbt-kubuszok.
-def aliasName(prefix: String, platform: String, scalaBinary: String): String =
-  s"$prefix-${platform.toLowerCase}-${scalaBinary.replace('.', '_')}"
-
-// In sbt 2.0 the `test` task is incremental and machine-wide cached (it behaves like sbt 1.x's
-// `testQuick`), so a CI run that begins with `clean` can still report "No tests to run" and pass
-// vacuously. `testFull` is the uncached full run. Rewrite the generated `<id>/test` steps to
-// `<id>/testFull` so CI always executes the whole suite.
-def fullTests(command: String): String =
-  command
-    .split(";")
-    .map { step =>
-      val trimmed = step.trim
-      if (trimmed.endsWith("/test")) trimmed.stripSuffix("/test") + "/testFull" else trimmed
-    }
-    .mkString(" ; ")
-
+// CI/test command aliases (e.g. ci-jvm-3, test-js-3, test-native-3), consumed by .github/workflows/ci.yml,
+// are registered by `al.commandAliases()` on the root project.
+//
 // The ci alias opens with `clean`, which deletes target/balticporter-lls — the generated sources —
 // and forces a regeneration (on CI it throws away the tree the `generate` job produced). A CI runner
 // starts from an empty target/, so the step buys nothing there; locally run `clean` yourself.
-def dropClean(command: String): String =
-  command.split(";").map(_.trim).filterNot(_ == "clean").mkString(" ; ")
+lazy val al = new Aliases(
+  published = Seq(lls, `lls-io`),
+  compileOnly = Seq(`lls-bench`, `lls-port`)
+) {
+  override def ci(platform: String, scalaBinary: String): String =
+    super.ci(platform, scalaBinary).split(";").map(_.trim).filterNot(_ == "clean").mkString(" ; ")
+}
 
-lazy val ciAliases: Seq[Def.Setting[?]] = {
-  val platformNames = List("JVM", "JS", "Native")
-  val scalaBinaries = List("3")
-  val perCombination = for {
-    platform    <- platformNames
-    scalaBinary <- scalaBinaries
-    setting <-
-      addCommandAlias(aliasName("ci", platform, scalaBinary), dropClean(fullTests(al.ci(platform, scalaBinary)))) ++
-        addCommandAlias(aliasName("test", platform, scalaBinary), fullTests(al.test(platform, scalaBinary)))
-  } yield setting
-  perCombination ++ addCommandAlias("ci-release", al.release) ++
+lazy val ciAliases: Seq[Def.Setting[?]] =
+  al.commandAliases() ++
     // generatePort: run the Baltic Porter generation and nothing else (the CI `generate` job)
     addCommandAlias("generatePort", "lls/Compile/managedSources") ++
     // verifyLocal: the gate before a push — every platform's tests, then record the verified commit
     addCommandAlias("verifyLocal", "ci-jvm-3 ; test-js-3 ; test-native-3 ; markVerified")
-}
 
 // Records the commit the local gate passed on (target/local-verification); the push hook of the
 // balticporter Claude Code plugin reads it. A dirty tree is not a commit, so nothing is recorded.
