@@ -2,7 +2,7 @@
 // sbt 2.0 has projectMatrix built in; sbt-welcome has no sbt2 build and is no longer bundled.
 addSbtPlugin("com.kubuszok" % "sbt-kubuszok" % "0.2.5")
 // benchmarks
-addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
+addSbtPlugin("com.github.sbt" % "sbt-jmh" % "0.4.9")
 
 // Baltic Porter: Java->Scala 3 porting engine, runs as a sourceGenerator. The policy it runs with is
 // lls's own (lls-port/, compiled into this meta-build by project/build.sbt). The `lls-port` module in
