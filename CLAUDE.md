@@ -39,7 +39,8 @@ meta-build (`project/build.sbt`), where the generator calls it, and as the publi
   `-Dbalticporter.forceRegen=true`; `sbt --client generatePort` runs the generation alone.
 - Bump the pin only to a hash whose `.pom` is already on the snapshot repository.
 - The procedures (tracing a generated defect to its rule, bumping the pin, sbt 2, CI caching) are
-  skills of the `balticporter` Claude Code plugin enabled in `.claude/settings.json`.
+  skills of the `baltic-porter` Claude Code plugin (kubuszok/agent-skills) enabled in
+  `.claude/settings.json`, named `baltic-porter-<topic>`.
 
 ## Build
 
