@@ -13,7 +13,7 @@ val scalas    = List(scala3)
 val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
 // Dependencies (test)
-// munit 1.3.3+: avoids the scala-native test-interface eviction with scala-native 0.5.12 on sbt 2.0.
+// munit 1.3.3+: avoids the scala-native test-interface eviction with scala-native 0.5.13 on sbt 2.0.
 val munitVersion           = "1.3.6"
 val munitScalacheckVersion = "1.3.1"
 val scalacheckVersion      = "1.20.0"
@@ -93,7 +93,7 @@ val commonSettings = Seq(
       analysis
     }
   )),
-  // Scala Native 0.5.12: munit 1.3.3 pulls test-interface 0.5.12 while scalacheck 1.19.0 still pulls
+  // Scala Native 0.5.13: munit 1.3.3 pulls test-interface 0.5.12 while scalacheck 1.19.0 still pulls
   // 0.5.8. Coursier already selects 0.5.12 (the newer toolchain version), but the Scala Native
   // plugin marks test-interface with a "strict" scheme, so the older request is reported as a
   // binary-incompat eviction error on sbt 2.0. Demote that eviction to a warning for native.
